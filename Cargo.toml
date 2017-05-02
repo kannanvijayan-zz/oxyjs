@@ -1,0 +1,15 @@
+[package]
+name = "oxyjs"
+version = "0.1.0"
+authors = ["kvijayan"]
+
+[lib]
+name = "liboxyjs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "oxyjs"
+path = "src/bin.rs"
+
+[dependencies]
+lazy_static = "0.2.8"
