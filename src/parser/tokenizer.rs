@@ -3,7 +3,7 @@ use parser::input_stream::{InputStream, StreamPosition};
 use parser::char_utils::{AsciiChar};
 
 /** The enum of all token kinds. */
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
     Error,
     End,
@@ -104,14 +104,16 @@ pub enum TokenKind {
     WhileKeyword
 }
 
+#[derive(Debug, Clone)]
 pub enum TokenError {
-    None,
     PrematureEnd(TokenKind),
     CantHandleUnicodeYet,
-    BadNumber
+    BadNumber,
+    UnrecognizedChar(char)
 }
 
 /** Raw information required to extract the token from the source text. */
+#[derive(Debug, Clone)]
 pub struct TokenLocation {
     start_offset: StreamPosition,
     end_offset: StreamPosition
@@ -133,9 +135,19 @@ impl TokenLocation {
  * The implementors of this will be a FullToken or a SyntaxToken, depending
  * on the kind of parse we're doiing.
  */
-pub trait Token where Self: Clone + Copy {
+pub trait Token where Self: Clone {
     fn make(kind: TokenKind, location: TokenLocation) -> Self;
     fn kind(&self) -> TokenKind;
+
+    fn has_kind(&self, kind: TokenKind) -> bool {
+        self.kind() == kind
+    }
+    fn is_error(&self) -> bool {
+        self.has_kind(TokenKind::Error)
+    }
+    fn is_end(&self) -> bool {
+        self.has_kind(TokenKind::End)
+    }
 }
 
 /**
@@ -167,7 +179,7 @@ pub struct Tokenizer<STREAM: InputStream, MODE: TokenizerMode> {
     tokenizer_mode: MODE,
     pushed_back_token: Option<MODE::Tok>,
     token_start_position: StreamPosition,
-    token_error: TokenError
+    token_error: Option<TokenError>
 }
 impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     where STREAM: InputStream,
@@ -179,8 +191,13 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             tokenizer_mode: tokenizer_mode,
             pushed_back_token: None,
             token_start_position: StreamPosition::default(),
-            token_error: TokenError::None
+            token_error: None
         }
+    }
+
+    pub fn get_error(&self) -> TokenError {
+        assert!(self.token_error.is_some());
+        self.token_error.as_ref().unwrap().clone()
     }
 
     pub fn next_token(&mut self, check_kw: bool) -> MODE::Tok {
@@ -202,15 +219,15 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
 
         if ch0.is_identifier_start() {
             if check_kw {
-                return self.read_identifier();
+                return self.read_identifier_or_keyword(ch0);
             } else {
-                return self.read_identifier_or_keyword();
+                return self.read_identifier();
             }
         }
 
         // Check single-char tokens.
         // Covers: Open/Close Paren/Bracket/Brace, Dot, Semicolon, Comma, Question, Colon, Tilde
-        let single_kind = check_single_char_token(ch0.octet_value());
+        let single_kind = check_single_char_token(ch0.octet_value_or_0xff());
         if single_kind != TokenKind::Error {
             return self.emit_token(single_kind);
         }
@@ -383,7 +400,20 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             return self.emit_token(TokenKind::BitXor);
         }
 
-        self.tokenizer_mode.make_token(TokenKind::Error, TokenLocation::default())
+        if self.check_and_finish_ascii_newline(ch0) {
+            return self.emit_token(TokenKind::Newline);
+        }
+
+        if ! ch0.is_ascii_or_end() {
+            // TODO: Handle unicode.
+            return self.emit_error(TokenError::CantHandleUnicodeYet);
+        }
+
+        if ch0.is_end() {
+            return self.emit_token(TokenKind::End);
+        }
+
+        self.emit_error(TokenError::UnrecognizedChar(ch0.octet_value() as char))
     }
 
     fn read_whitespace(&mut self) -> MODE::Tok {
@@ -409,9 +439,9 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         self.emit_token(TokenKind::Identifier)
     }
 
-    fn read_identifier_or_keyword(&mut self) -> MODE::Tok {
+    fn read_identifier_or_keyword(&mut self, ch0: AsciiChar) -> MODE::Tok {
         // Keep a track of the last 4 bytes of the identifier.
-        let mut tail_word = 0 as u32;
+        let mut tail_word = ch0.ascii_value() as u32;
         loop {
             let ch = self.read_ascii_char();
             if ! ch.is_identifier_continue() {
@@ -809,7 +839,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     }
 
     fn emit_error(&mut self, err: TokenError) -> MODE::Tok {
-        self.token_error = err;
+        self.token_error = Some(err);
 
         let token_end_position = self.input_stream.mark();
         let token_location = TokenLocation::new(self.token_start_position, token_end_position);
@@ -837,7 +867,7 @@ lazy_static! {
     static ref SINGLE_CHAR_TOKENS: Vec<TokenKind> = {
         let mut vec = Vec::with_capacity(256);
         for i in 0..256 {
-            vec[i] = TokenKind::Error;
+            vec.push(TokenKind::Error);
         }
 
         {

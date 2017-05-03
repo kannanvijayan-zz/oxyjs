@@ -27,6 +27,9 @@ impl AsciiChar {
         assert!(!self.is_end());
         self.0 as u8
     }
+    pub fn octet_value_or_0xff(self) -> u8 {
+        self.0 as u8
+    }
 
     pub fn is_end(self) -> bool {
         self.0 < 0
