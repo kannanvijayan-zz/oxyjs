@@ -14,6 +14,10 @@ pub enum TokenKind {
     BlockComment,
 
     Identifier,
+    IntegerLiteral,
+    HexIntegerLiteral,
+    OctIntegerLiteral,
+    FloatLiteral,
 
     // Braces.
     OpenParen,
@@ -103,7 +107,8 @@ pub enum TokenKind {
 pub enum TokenError {
     None,
     PrematureEnd(TokenKind),
-    CantHandleUnicodeYet
+    CantHandleUnicodeYet,
+    BadNumber
 }
 
 /** Raw information required to extract the token from the source text. */
@@ -208,6 +213,14 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         let single_kind = check_single_char_token(ch0.octet_value());
         if single_kind != TokenKind::Error {
             return self.emit_token(single_kind);
+        }
+
+        if ch0.is_digit() {
+            if ch0.is_char('0') {
+                return self.read_ascii_number_starting_with_zero();
+            } else {
+                return self.read_ascii_number();
+            }
         }
 
         if ch0.is_char('/') {
@@ -533,6 +546,190 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         }
 
         self.emit_token(TokenKind::Identifier)
+    }
+
+    fn read_ascii_number_starting_with_zero(&mut self) -> MODE::Tok {
+        let ch1 = self.read_ascii_char();
+        if ch1.is_char('x') || ch1.is_char('X') {
+            return self.read_ascii_hex_number();
+        }
+        if ch1.is_digit() {
+            return self.read_ascii_oct_number();
+        }
+        if ch1.is_char('.') {
+            return self.read_ascii_float_fraction();
+        }
+        if ch1.is_char('e') || ch1.is_char('E') {
+            return self.read_ascii_float_exponent();
+        }
+        if ch1.is_identifier_continue() {
+            return self.emit_error(TokenError::BadNumber);
+        }
+        if ! ch1.is_ascii_or_end() {
+            // TODO: Check for non-ascii identifier and return BadNumber if so.
+            return self.emit_error(TokenError::CantHandleUnicodeYet);
+        }
+        self.unread_ascii_char(ch1);
+        return self.emit_token(TokenKind::IntegerLiteral);
+    }
+
+    fn read_ascii_hex_number(&mut self) -> MODE::Tok {
+        let ch0 = self.read_ascii_char();
+        if ! ch0.is_hex_digit() {
+            if ! ch0.is_ascii_or_end() {
+                // TODO: Read a non-ascii char and return BadNumber.
+                return self.emit_error(TokenError::CantHandleUnicodeYet);
+            }
+            return self.emit_error(TokenError::BadNumber)
+        }
+
+        loop {
+            let ch = self.read_ascii_char();
+            if ! ch.is_hex_digit() {
+                // If it's some other identifier character, error out.
+                if ch.is_identifier_continue() {
+                    return self.emit_error(TokenError::BadNumber);
+                }
+
+                // If char is not ascii or end-of-input, unread it and read a unicode char.
+                if ! ch.is_ascii_or_end() {
+                    // TODO: Handle unicode chars.
+                    return self.emit_error(TokenError::CantHandleUnicodeYet);
+                }
+
+                // Otherwise it's either end-of-stream or some other char.
+                self.unread_ascii_char(ch);
+                break;
+            }
+        }
+        self.emit_token(TokenKind::HexIntegerLiteral)
+    }
+
+    fn read_ascii_oct_number(&mut self) -> MODE::Tok {
+        loop {
+            let ch = self.read_ascii_char();
+            if ! ch.is_oct_digit() {
+                // If it's some other identifier character, error out.
+                if ch.is_identifier_continue() {
+                    return self.emit_error(TokenError::BadNumber);
+                }
+
+                // If char is not ascii or end-of-input, unread it and read a unicode char.
+                if ! ch.is_ascii_or_end() {
+                    // TODO: Handle unicode chars.
+                    return self.emit_error(TokenError::CantHandleUnicodeYet);
+                }
+
+                // Otherwise it's either end-of-stream or some other char.
+                self.unread_ascii_char(ch);
+                break;
+            }
+        }
+        self.emit_token(TokenKind::OctIntegerLiteral)
+    }
+
+    fn read_ascii_number(&mut self) -> MODE::Tok {
+        loop {
+            let ch = self.read_ascii_char();
+            if ! ch.is_digit() {
+                if ch.is_char('.') {
+                    return self.read_ascii_float_fraction();
+                }
+                if ch.is_char('e') || ch.is_char('E') {
+                    return self.read_ascii_float_exponent();
+                }
+                if ch.is_identifier_continue() {
+                    return self.emit_error(TokenError::BadNumber);
+                }
+                if ! ch.is_ascii_or_end() {
+                    // TODO: Check for non-ascii identifier and return BadNumber if so.
+                    return self.emit_error(TokenError::CantHandleUnicodeYet);
+                }
+                self.unread_ascii_char(ch);
+                break;
+            }
+        }
+
+        return self.emit_token(TokenKind::IntegerLiteral);
+    }
+
+    fn read_ascii_float_fraction(&mut self) -> MODE::Tok {
+        loop {
+            let ch = self.read_ascii_char();
+            if ! ch.is_digit() {
+                if ch.is_char('e') || ch.is_char('E') {
+                    return self.read_ascii_float_exponent();
+                }
+                if ch.is_identifier_continue() {
+                    return self.emit_error(TokenError::BadNumber);
+                }
+                if ! ch.is_ascii_or_end() {
+                    // TODO: Check for non-ascii identifier and return BadNumber if so.
+                    return self.emit_error(TokenError::CantHandleUnicodeYet);
+                }
+                self.unread_ascii_char(ch);
+                break;
+            }
+        }
+
+        return self.emit_token(TokenKind::FloatLiteral);
+    }
+
+    fn read_ascii_float_exponent(&mut self) -> MODE::Tok {
+        // Exponent sigil must be followed by digit, optionally preceded by a '+' or '-'.
+        let ch0 = self.read_ascii_char();
+        if ch0.is_char('+') || ch0.is_char('-') {
+            let ch1 = self.read_ascii_char();
+            if ! ch1.is_digit() {
+                if ch1.is_identifier_continue() {
+                    return self.emit_error(TokenError::BadNumber);
+                }
+                if ! ch1.is_ascii_or_end() {
+                    // TODO: Read unicode character and raise error.
+                    return self.emit_error(TokenError::CantHandleUnicodeYet);
+                }
+
+                if ch1.is_end() {
+                    return self.emit_error(TokenError::PrematureEnd(TokenKind::FloatLiteral));
+                }
+
+                self.unread_ascii_char(ch1);
+                return self.emit_error(TokenError::BadNumber);
+            }
+        } else if ! ch0.is_digit() {
+            if ch0.is_identifier_continue() {
+                return self.emit_error(TokenError::BadNumber);
+            }
+
+            if ! ch0.is_ascii_or_end() {
+                // TODO: Read unicode character and raise error.
+                return self.emit_error(TokenError::CantHandleUnicodeYet);
+            }
+
+            if ch0.is_end() {
+                return self.emit_error(TokenError::PrematureEnd(TokenKind::FloatLiteral));
+            }
+
+            self.unread_ascii_char(ch0);
+            return self.emit_error(TokenError::BadNumber);
+        }
+
+        loop {
+            let ch = self.read_ascii_char();
+            if ! ch.is_digit() {
+                if ch.is_identifier_continue() {
+                    return self.emit_error(TokenError::BadNumber);
+                }
+                if ! ch.is_ascii_or_end() {
+                    // TODO: Check for non-ascii identifier and return BadNumber if so.
+                    return self.emit_error(TokenError::CantHandleUnicodeYet);
+                }
+                self.unread_ascii_char(ch);
+                break;
+            }
+        }
+
+        return self.emit_token(TokenKind::FloatLiteral);
     }
 
     fn read_line_comment(&mut self) -> MODE::Tok {

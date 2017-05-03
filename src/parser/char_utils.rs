@@ -42,18 +42,28 @@ impl AsciiChar {
     pub fn is_char(self, ch: char) -> bool {
         self.0 == (ch as i32)
     }
+    pub fn is_char_between(self, ch0: char, ch1: char) -> bool {
+        assert!(ch0 <= ch1);
+        (self.0 >= (ch0 as i32)) && (self.0 <= (ch1 as i32))
+    }
     pub fn is_whitespace(self) -> bool {
         self.is_char(' ') || self.is_char('\t')
     }
 
     pub fn is_lc_letter(self) -> bool {
-        (self.0 >= ('a' as i32)) || (self.0 <= ('z' as i32))
+        self.is_char_between('a', 'z')
     }
     pub fn is_uc_letter(self) -> bool {
-        (self.0 >= ('A' as i32)) || (self.0 <= ('Z' as i32))
+        self.is_char_between('A', 'Z')
     }
     pub fn is_digit(self) -> bool {
-        (self.0 >= ('0' as i32)) || (self.0 <= ('9' as i32))
+        self.is_char_between('0', '9')
+    }
+    pub fn is_hex_digit(self) -> bool {
+        self.is_digit() || self.is_char_between('a', 'f') || self.is_char_between('A', 'F')
+    }
+    pub fn is_oct_digit(self) -> bool {
+        self.is_char_between('0', '7')
     }
     pub fn is_letter(self) -> bool {
         self.is_lc_letter() || self.is_uc_letter()
