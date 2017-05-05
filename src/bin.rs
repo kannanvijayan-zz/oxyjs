@@ -18,5 +18,5 @@ fn main() {
     let stream = VecInputStream::new(buf);
     let mut builder = AstBuilder::new(stream);
 
-    builder.parse_program().unwrap();
+    builder.read_and_print_tokens();
 }

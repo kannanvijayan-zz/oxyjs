@@ -18,16 +18,16 @@ pub struct ProgramNode {
     source_elements: Vec<Box<SourceElement>>
 }
 impl ProgramNode {
-    fn new() -> ProgramNode {
+    pub fn new() -> ProgramNode {
         ProgramNode {
             source_elements: Vec::with_capacity(3)
         }
     }
 
-    fn source_elements(&self) -> &Vec<Box<SourceElement>> {
+    pub fn source_elements(&self) -> &Vec<Box<SourceElement>> {
         &self.source_elements
     }
-    fn add_source_element(&mut self, source_element: Box<SourceElement>) {
+    pub fn add_source_element(&mut self, source_element: Box<SourceElement>) {
         self.source_elements.push(source_element);
     }
 }

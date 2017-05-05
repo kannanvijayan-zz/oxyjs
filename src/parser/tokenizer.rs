@@ -1,108 +1,8 @@
 
+use parser::char_utils::AsciiChar;
 use parser::input_stream::{InputStream, StreamPosition};
-use parser::char_utils::{AsciiChar};
+use parser::token_kind::TokenKind;
 
-/** The enum of all token kinds. */
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TokenKind {
-    Error,
-    End,
-
-    Whitespace,
-    Newline,
-    LineComment,
-    BlockComment,
-
-    Identifier,
-    IntegerLiteral,
-    HexIntegerLiteral,
-    OctIntegerLiteral,
-    FloatLiteral,
-
-    // Braces.
-    OpenParen,
-    CloseParen,
-    OpenBracket,
-    CloseBracket,
-    OpenBrace,
-    CloseBrace,
-
-    // Punctuation.
-    Dot,
-    Semicolon,
-    Comma,
-    Question,
-    Colon,
-
-    // Comparison
-    Equal,
-    StrictEqual,
-    NotEqual,
-    StrictNotEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-
-    // Operators
-    Tilde,
-    Bang,
-    Plus,
-    PlusPlus,
-    Minus,
-    MinusMinus,
-    Star,
-    Slash,
-    Percent,
-    ShiftLeft,
-    ShiftRight,
-    ArithmeticShiftRight,
-    BitAnd,
-    BitOr,
-    BitXor,
-    LogicalAnd,
-    LogicalOr,
-
-    // Assignment
-    Assign,
-    PlusAssign,
-    MinusAssign,
-    StarAssign,
-    SlashAssign,
-    PercentAssign,
-    ShiftLeftAssign,
-    ShiftRightAssign,
-    ArithmeticShiftRightAssign,
-    BitAndAssign,
-    BitOrAssign,
-    BitXorAssign,
-
-    // Keywords
-    BreakKeyword,
-    CaseKeyword,
-    CatchKeyword,
-    ContinueKeyword,
-    DefaultKeyword,
-    DeleteKeyword,
-    DoKeyword,
-    ElseKeyword,
-    FinallyKeyword,
-    ForKeyword,
-    FunctionKeyword,
-    IfKeyword,
-    InKeyword,
-    InstanceofKeyword,
-    NewKeyword,
-    ReturnKeyword,
-    SwitchKeyword,
-    ThisKeyword,
-    ThrowKeyword,
-    TryKeyword,
-    TypeofKeyword,
-    VarKeyword,
-    VoidKeyword,
-    WhileKeyword
-}
 
 #[derive(Debug, Clone)]
 pub enum TokenError {
@@ -128,6 +28,13 @@ impl TokenLocation {
     pub fn default() -> TokenLocation {
         Self::new(StreamPosition::default(), StreamPosition::default())
     }
+
+    pub fn start_offset(&self) -> StreamPosition {
+        self.start_offset
+    }
+    pub fn end_offset(&self) -> StreamPosition {
+        self.end_offset
+    }
 }
 
 /**
@@ -138,16 +45,7 @@ impl TokenLocation {
 pub trait Token where Self: Clone {
     fn make(kind: TokenKind, location: TokenLocation) -> Self;
     fn kind(&self) -> TokenKind;
-
-    fn has_kind(&self, kind: TokenKind) -> bool {
-        self.kind() == kind
-    }
-    fn is_error(&self) -> bool {
-        self.has_kind(TokenKind::Error)
-    }
-    fn is_end(&self) -> bool {
-        self.has_kind(TokenKind::End)
-    }
+    fn start_offset(&self) -> StreamPosition;
 }
 
 /**
@@ -177,9 +75,13 @@ pub trait TokenizerMode {
 pub struct Tokenizer<STREAM: InputStream, MODE: TokenizerMode> {
     input_stream: STREAM,
     tokenizer_mode: MODE,
-    pushed_back_token: Option<MODE::Tok>,
     token_start_position: StreamPosition,
-    token_error: Option<TokenError>
+    token_error: Option<TokenError>,
+
+    buffer_start_position: StreamPosition,
+    token_buffer: Vec<(MODE::Tok, bool)>,
+    token_buffer_reverse_index: usize,
+    backtrack_point_enabled: bool
 }
 impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     where STREAM: InputStream,
@@ -189,9 +91,12 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         Tokenizer {
             input_stream: input_stream,
             tokenizer_mode: tokenizer_mode,
-            pushed_back_token: None,
             token_start_position: StreamPosition::default(),
-            token_error: None
+            token_error: None,
+            buffer_start_position: StreamPosition::default(),
+            token_buffer: Vec::with_capacity(4),
+            token_buffer_reverse_index: 0,
+            backtrack_point_enabled: false
         }
     }
 
@@ -201,10 +106,77 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     }
 
     pub fn next_token(&mut self, check_kw: bool) -> MODE::Tok {
-        match self.pushed_back_token.take() {
-            Option::Some(token) => token,
-            Option::None => self.read_token(check_kw)
+        assert!(self.token_error.is_none());
+        if self.token_buffer_reverse_index > 0 {
+            match self.check_saved_token(check_kw) {
+                Some(tok) => { return tok; },
+                None => {}
+            }
         }
+        self.read_token(check_kw)
+    }
+
+    pub fn set_backtrack_point(&mut self) {
+        // If we have saved tokens already, this sets the backtrack point to the
+        // current saved token position, which effectively means clearing all the saved
+        // tokens up to the current saved token index.
+        let idx = self.saved_token_index();
+        if idx > 0 {
+            self.token_buffer = self.token_buffer.split_off(idx);
+        }
+        self.backtrack_point_enabled = true;
+    }
+
+    pub fn rewind_backtrack_point(&mut self) {
+        assert!(self.backtrack_point_enabled);
+        self.token_buffer_reverse_index = self.token_buffer.len();
+    }
+
+    pub fn clear_backtrack_point(&mut self) {
+        assert!(self.backtrack_point_enabled);
+        // This is mostly the same as setting the backtrack point when its already set.
+        let idx = self.saved_token_index();
+        if idx > 0 {
+            self.token_buffer = self.token_buffer.split_off(idx);
+        }
+        self.backtrack_point_enabled = false;
+    }
+
+    fn check_saved_token(&mut self, check_kw: bool) -> Option<MODE::Tok> {
+        let idx = self.saved_token_index();
+        let (token, token_check_kw) = {
+            let token_checkkw_ref = unsafe { self.token_buffer.get_unchecked(idx) };
+            (token_checkkw_ref.0.clone(), token_checkkw_ref.1)
+        };
+
+        // There are three conditions where we don't have to reparse old tokens:
+        // 1. The check-kw modes match.
+        // 2. This call wants check_kw AND the token is NOT an identifier.
+        // 3. This call wants no-check_kw AND the token is NOT a keyword.
+        if (check_kw == token_check_kw) ||
+           (check_kw && !token.kind().is_identifier()) ||
+           (!check_kw && !token.kind().is_keyword())
+        {
+            self.token_buffer_reverse_index -= 1;
+            // If backtrack_point is disabled, and we've reached the end
+            // of saved tokens, clear the vector.
+            if !self.backtrack_point_enabled && self.token_buffer_reverse_index == 0 {
+                self.token_buffer.clear();
+            }
+            return Some(token);
+        }
+
+        // Otherwise, clear the stream to the reset position, and clear the saved
+        // tokens.
+        self.token_buffer.truncate(idx);
+        self.input_stream.rewind(token.start_offset());
+        self.token_buffer_reverse_index = 0;
+        None
+    }
+
+    fn saved_token_index(&self) -> usize {
+        assert!(self.token_buffer_reverse_index <= self.token_buffer.len());
+        self.token_buffer.len() - self.token_buffer_reverse_index
     }
 
     fn read_token(&mut self, check_kw: bool) -> MODE::Tok {
@@ -228,7 +200,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         // Check single-char tokens.
         // Covers: Open/Close Paren/Bracket/Brace, Dot, Semicolon, Comma, Question, Colon, Tilde
         let single_kind = check_single_char_token(ch0.octet_value_or_0xff());
-        if single_kind != TokenKind::Error {
+        if ! single_kind.is_error() {
             return self.emit_token(single_kind);
         }
 
@@ -249,10 +221,10 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
                 return self.read_block_comment();
             }
             if ch1.is_char('=') {
-                return self.emit_token(TokenKind::SlashAssign);
+                return self.emit_token(TokenKind::slash_assign());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::Slash);
+            return self.emit_token(TokenKind::slash());
         }
 
         if ch0.is_char('=') {
@@ -260,13 +232,13 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             if ch1.is_char('=') {
                 let ch2 = self.read_ascii_char();
                 if ch2.is_char('=') {
-                    return self.emit_token(TokenKind::StrictEqual);
+                    return self.emit_token(TokenKind::strict_equal());
                 }
                 self.unread_ascii_char(ch2);
-                return self.emit_token(TokenKind::Equal);
+                return self.emit_token(TokenKind::equal());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::Assign);
+            return self.emit_token(TokenKind::assign());
         }
 
         if ch0.is_char('!') {
@@ -274,134 +246,134 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             if ch1.is_char('=') {
                 let ch2 = self.read_ascii_char();
                 if ch2.is_char('=') {
-                    return self.emit_token(TokenKind::StrictNotEqual);
+                    return self.emit_token(TokenKind::strict_not_equal());
                 }
                 self.unread_ascii_char(ch2);
-                return self.emit_token(TokenKind::NotEqual);
+                return self.emit_token(TokenKind::not_equal());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::Bang);
+            return self.emit_token(TokenKind::bang());
         }
 
         if ch0.is_char('<') {
             let ch1 = self.read_ascii_char();
             if ch1.is_char('=') {
-                return self.emit_token(TokenKind::LessEqual);
+                return self.emit_token(TokenKind::less_equal());
             }
             if ch1.is_char('<') {
                 let ch2 = self.read_ascii_char();
                 if ch2.is_char('=') {
-                    return self.emit_token(TokenKind::ShiftLeftAssign);
+                    return self.emit_token(TokenKind::shift_left_assign());
                 }
                 self.unread_ascii_char(ch2);
-                return self.emit_token(TokenKind::ShiftLeft);
+                return self.emit_token(TokenKind::shift_left());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::Less);
+            return self.emit_token(TokenKind::less());
         }
 
         if ch0.is_char('>') {
             let ch1 = self.read_ascii_char();
             if ch1.is_char('=') {
-                return self.emit_token(TokenKind::GreaterEqual);
+                return self.emit_token(TokenKind::greater_equal());
             }
             if ch1.is_char('>') {
                 let ch2 = self.read_ascii_char();
                 if ch2.is_char('=') {
-                    return self.emit_token(TokenKind::ShiftRightAssign);
+                    return self.emit_token(TokenKind::shift_right_assign());
                 }
                 if ch2.is_char('>') {
                     let ch3 = self.read_ascii_char();
                     if ch3.is_char('=') {
-                        return self.emit_token(TokenKind::ArithmeticShiftRightAssign);
+                        return self.emit_token(TokenKind::arithmetic_shift_right_assign());
                     }
                     self.unread_ascii_char(ch3);
-                    return self.emit_token(TokenKind::ArithmeticShiftRight);
+                    return self.emit_token(TokenKind::arithmetic_shift_right());
                 }
                 self.unread_ascii_char(ch2);
-                return self.emit_token(TokenKind::ShiftRight);
+                return self.emit_token(TokenKind::shift_right());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::Greater);
+            return self.emit_token(TokenKind::greater());
         }
 
         if ch0.is_char('*') {
             let ch1 = self.read_ascii_char();
             if ch1.is_char('=') {
-                return self.emit_token(TokenKind::StarAssign);
+                return self.emit_token(TokenKind::star_assign());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::Star);
+            return self.emit_token(TokenKind::star());
         }
 
         if ch0.is_char('+') {
             let ch1 = self.read_ascii_char();
             if ch1.is_char('+') {
-                return self.emit_token(TokenKind::PlusPlus);
+                return self.emit_token(TokenKind::plus_plus());
             }
             if ch1.is_char('=') {
-                return self.emit_token(TokenKind::PlusAssign);
+                return self.emit_token(TokenKind::plus_assign());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::Plus);
+            return self.emit_token(TokenKind::plus());
         }
 
         if ch0.is_char('-') {
             let ch1 = self.read_ascii_char();
             if ch1.is_char('-') {
-                return self.emit_token(TokenKind::MinusMinus);
+                return self.emit_token(TokenKind::minus_minus());
             }
             if ch1.is_char('=') {
-                return self.emit_token(TokenKind::MinusAssign);
+                return self.emit_token(TokenKind::minus_assign());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::Minus);
+            return self.emit_token(TokenKind::minus());
         }
 
         if ch0.is_char('%') {
             let ch1 = self.read_ascii_char();
             if ch1.is_char('=') {
-                return self.emit_token(TokenKind::PercentAssign);
+                return self.emit_token(TokenKind::percent_assign());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::Percent);
+            return self.emit_token(TokenKind::percent());
         }
 
         if ch0.is_char('&') {
             let ch1 = self.read_ascii_char();
             if ch1.is_char('=') {
-                return self.emit_token(TokenKind::BitAndAssign);
+                return self.emit_token(TokenKind::bit_and_assign());
             }
             if ch1.is_char('&') {
-                return self.emit_token(TokenKind::LogicalAnd);
+                return self.emit_token(TokenKind::logical_and());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::BitAnd);
+            return self.emit_token(TokenKind::bit_and());
         }
 
         if ch0.is_char('|') {
             let ch1 = self.read_ascii_char();
             if ch1.is_char('=') {
-                return self.emit_token(TokenKind::BitOrAssign);
+                return self.emit_token(TokenKind::bit_or_assign());
             }
             if ch1.is_char('&') {
-                return self.emit_token(TokenKind::LogicalOr);
+                return self.emit_token(TokenKind::logical_or());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::BitOr);
+            return self.emit_token(TokenKind::bit_or());
         }
 
         if ch0.is_char('^') {
             let ch1 = self.read_ascii_char();
             if ch1.is_char('=') {
-                return self.emit_token(TokenKind::BitXorAssign);
+                return self.emit_token(TokenKind::bit_xor_assign());
             }
             self.unread_ascii_char(ch1);
-            return self.emit_token(TokenKind::BitXor);
+            return self.emit_token(TokenKind::bit_xor());
         }
 
         if self.check_and_finish_ascii_newline(ch0) {
-            return self.emit_token(TokenKind::Newline);
+            return self.emit_token(TokenKind::newline());
         }
 
         if ! ch0.is_ascii_or_end() {
@@ -410,7 +382,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         }
 
         if ch0.is_end() {
-            return self.emit_token(TokenKind::End);
+            return self.emit_token(TokenKind::end());
         }
 
         self.emit_error(TokenError::UnrecognizedChar(ch0.octet_value() as char))
@@ -424,7 +396,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
                 break;
             }
         }
-        self.emit_token(TokenKind::Whitespace)
+        self.emit_token(TokenKind::whitespace())
     }
 
     fn read_identifier(&mut self) -> MODE::Tok {
@@ -436,7 +408,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
                 break;
             }
         }
-        self.emit_token(TokenKind::Identifier)
+        self.emit_token(TokenKind::identifier())
     }
 
     fn read_identifier_or_keyword(&mut self, ch0: AsciiChar) -> MODE::Tok {
@@ -476,106 +448,106 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         //      do, void, finally
 
         if tail_word == Self::make_tail_word_4('t', 'h', 'i', 's') {
-            return self.emit_token(TokenKind::ThisKeyword);
+            return self.emit_token_check_kw(TokenKind::this_keyword());
 
         } else if tail_word == Self::make_tail_word_4('t', 'i', 'o', 'n') {
             if self.input_stream.check_ascii_text(&['f','u','n','c'], self.token_start_position) {
-                return self.emit_token(TokenKind::FunctionKeyword);
+                return self.emit_token_check_kw(TokenKind::function_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_2('i', 'f') {
-            return self.emit_token(TokenKind::IfKeyword);
+            return self.emit_token_check_kw(TokenKind::if_keyword());
 
         } else if tail_word == Self::make_tail_word_4('t', 'u', 'r', 'n') {
             if self.input_stream.check_ascii_text(&['r','e','t'], self.token_start_position) {
-                return self.emit_token(TokenKind::ReturnKeyword);
+                return self.emit_token_check_kw(TokenKind::return_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_3('v', 'a', 'r') {
-            return self.emit_token(TokenKind::VarKeyword);
+            return self.emit_token_check_kw(TokenKind::var_keyword());
 
         } else if tail_word == Self::make_tail_word_4('e', 'l', 's', 'e') {
-            return self.emit_token(TokenKind::ElseKeyword);
+            return self.emit_token_check_kw(TokenKind::else_keyword());
 
         } else if tail_word == Self::make_tail_word_3('f', 'o', 'r') {
-            return self.emit_token(TokenKind::ForKeyword);
+            return self.emit_token_check_kw(TokenKind::for_keyword());
 
         } else if tail_word == Self::make_tail_word_3('n', 'e', 'w') {
-            return self.emit_token(TokenKind::NewKeyword);
+            return self.emit_token_check_kw(TokenKind::new_keyword());
 
         } else if tail_word == Self::make_tail_word_2('i', 'n') {
-            return self.emit_token(TokenKind::InKeyword);
+            return self.emit_token_check_kw(TokenKind::in_keyword());
 
         } else if tail_word == Self::make_tail_word_4('p', 'e', 'o', 'f') {
             if self.input_stream.check_ascii_text(&['t','y'], self.token_start_position) {
-                return self.emit_token(TokenKind::TypeofKeyword);
+                return self.emit_token_check_kw(TokenKind::typeof_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_4('h', 'i', 'l', 'e') {
             if self.input_stream.check_ascii_text(&['w'], self.token_start_position) {
-                return self.emit_token(TokenKind::WhileKeyword);
+                return self.emit_token_check_kw(TokenKind::while_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_4('c', 'a', 's', 'e') {
-            return self.emit_token(TokenKind::CaseKeyword);
+            return self.emit_token_check_kw(TokenKind::case_keyword());
 
         } else if tail_word == Self::make_tail_word_4('r', 'e', 'a', 'k') {
             if self.input_stream.check_ascii_text(&['b'], self.token_start_position) {
-                return self.emit_token(TokenKind::BreakKeyword);
+                return self.emit_token_check_kw(TokenKind::break_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_3('t', 'r', 'y') {
-            return self.emit_token(TokenKind::TryKeyword);
+            return self.emit_token_check_kw(TokenKind::try_keyword());
 
         } else if tail_word == Self::make_tail_word_4('a', 't', 'c', 'h') {
             if self.input_stream.check_ascii_text(&['c'], self.token_start_position) {
-                return self.emit_token(TokenKind::CatchKeyword);
+                return self.emit_token_check_kw(TokenKind::catch_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_4('l', 'e', 't', 'e') {
             if self.input_stream.check_ascii_text(&['d', 'e'], self.token_start_position) {
-                return self.emit_token(TokenKind::DeleteKeyword);
+                return self.emit_token_check_kw(TokenKind::delete_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_4('h', 'r', 'o', 'w') {
             if self.input_stream.check_ascii_text(&['t'], self.token_start_position) {
-                return self.emit_token(TokenKind::ThrowKeyword);
+                return self.emit_token_check_kw(TokenKind::throw_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_4('i', 't', 'c', 'h') {
             if self.input_stream.check_ascii_text(&['s', 'w'], self.token_start_position) {
-                return self.emit_token(TokenKind::SwitchKeyword);
+                return self.emit_token_check_kw(TokenKind::switch_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_4('i', 'n', 'u', 'e') {
             if self.input_stream.check_ascii_text(&['c','o','n','t'], self.token_start_position) {
-                return self.emit_token(TokenKind::ContinueKeyword);
+                return self.emit_token_check_kw(TokenKind::continue_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_4('a', 'u', 'l', 't') {
             if self.input_stream.check_ascii_text(&['d','e','f'], self.token_start_position) {
-                return self.emit_token(TokenKind::DefaultKeyword);
+                return self.emit_token_check_kw(TokenKind::default_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_4('c', 'e', 'o', 'f') {
             if self.input_stream.check_ascii_text(&['i','n','s','t','a','n'],
                                                   self.token_start_position) {
-                return self.emit_token(TokenKind::DefaultKeyword);
+                return self.emit_token_check_kw(TokenKind::instanceof_keyword());
             }
 
         } else if tail_word == Self::make_tail_word_2('d', 'o') {
-            return self.emit_token(TokenKind::DoKeyword);
+            return self.emit_token_check_kw(TokenKind::do_keyword());
 
         } else if tail_word == Self::make_tail_word_4('v', 'o', 'i', 'd') {
-            return self.emit_token(TokenKind::VoidKeyword);
+            return self.emit_token_check_kw(TokenKind::void_keyword());
 
         } else if tail_word == Self::make_tail_word_4('a', 'l', 'l', 'y') {
             if self.input_stream.check_ascii_text(&['f','i','n'], self.token_start_position) {
-                return self.emit_token(TokenKind::FinallyKeyword);
+                return self.emit_token_check_kw(TokenKind::finally_keyword());
             }
         }
 
-        self.emit_token(TokenKind::Identifier)
+        self.emit_token_check_kw(TokenKind::identifier())
     }
 
     fn read_ascii_number_starting_with_zero(&mut self) -> MODE::Tok {
@@ -600,7 +572,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             return self.emit_error(TokenError::CantHandleUnicodeYet);
         }
         self.unread_ascii_char(ch1);
-        return self.emit_token(TokenKind::IntegerLiteral);
+        return self.emit_token(TokenKind::integer_literal());
     }
 
     fn read_ascii_hex_number(&mut self) -> MODE::Tok {
@@ -632,7 +604,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
                 break;
             }
         }
-        self.emit_token(TokenKind::HexIntegerLiteral)
+        self.emit_token(TokenKind::hex_integer_literal())
     }
 
     fn read_ascii_oct_number(&mut self) -> MODE::Tok {
@@ -655,7 +627,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
                 break;
             }
         }
-        self.emit_token(TokenKind::OctIntegerLiteral)
+        self.emit_token(TokenKind::oct_integer_literal())
     }
 
     fn read_ascii_number(&mut self) -> MODE::Tok {
@@ -680,7 +652,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             }
         }
 
-        return self.emit_token(TokenKind::IntegerLiteral);
+        return self.emit_token(TokenKind::integer_literal());
     }
 
     fn read_ascii_float_fraction(&mut self) -> MODE::Tok {
@@ -702,7 +674,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             }
         }
 
-        return self.emit_token(TokenKind::FloatLiteral);
+        return self.emit_token(TokenKind::float_literal());
     }
 
     fn read_ascii_float_exponent(&mut self) -> MODE::Tok {
@@ -720,7 +692,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
                 }
 
                 if ch1.is_end() {
-                    return self.emit_error(TokenError::PrematureEnd(TokenKind::FloatLiteral));
+                    return self.emit_error(TokenError::PrematureEnd(TokenKind::float_literal()));
                 }
 
                 self.unread_ascii_char(ch1);
@@ -737,7 +709,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             }
 
             if ch0.is_end() {
-                return self.emit_error(TokenError::PrematureEnd(TokenKind::FloatLiteral));
+                return self.emit_error(TokenError::PrematureEnd(TokenKind::float_literal()));
             }
 
             self.unread_ascii_char(ch0);
@@ -759,7 +731,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             }
         }
 
-        return self.emit_token(TokenKind::FloatLiteral);
+        return self.emit_token(TokenKind::float_literal());
     }
 
     fn read_line_comment(&mut self) -> MODE::Tok {
@@ -782,7 +754,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
 
             // Otherwise, char is ascii and not a newline.  Continue.
         }
-        self.emit_token(TokenKind::LineComment)
+        self.emit_token(TokenKind::comment())
     }
 
     fn read_block_comment(&mut self) -> MODE::Tok {
@@ -814,12 +786,12 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
 
             // Check for end of input in the middle of a block comment, which is an error.
             if ch.is_end() {
-                return self.emit_error(TokenError::PrematureEnd(TokenKind::Newline));
+                return self.emit_error(TokenError::PrematureEnd(TokenKind::newline()));
             }
 
             // Otherwise, char is ascii and not a comment terminator.  Continue.
         }
-        self.emit_token(TokenKind::BlockComment)
+        self.emit_token(TokenKind::comment())
     }
 
     fn check_and_finish_ascii_newline(&mut self, ch: AsciiChar) -> bool {
@@ -843,13 +815,29 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
 
         let token_end_position = self.input_stream.mark();
         let token_location = TokenLocation::new(self.token_start_position, token_end_position);
-        self.tokenizer_mode.make_token(TokenKind::Error, token_location)
+
+        // Error tokens are not saved on the token buffer.
+        self.tokenizer_mode.make_token(TokenKind::error(), token_location)
+    }
+
+    fn emit_token_impl(&mut self, kind: TokenKind, check_kw: bool) -> MODE::Tok {
+        let token_end_position = self.input_stream.mark();
+        let token_location = TokenLocation::new(self.token_start_position, token_end_position);
+        let token = self.tokenizer_mode.make_token(kind, token_location);
+
+        assert!(self.token_buffer_reverse_index == 0);
+        if self.backtrack_point_enabled {
+            self.token_buffer.push((token.clone(), check_kw));
+        }
+        token
     }
 
     fn emit_token(&mut self, kind: TokenKind) -> MODE::Tok {
-        let token_end_position = self.input_stream.mark();
-        let token_location = TokenLocation::new(self.token_start_position, token_end_position);
-        self.tokenizer_mode.make_token(kind, token_location)
+        self.emit_token_impl(kind, /* check_kw = */ false)
+    }
+
+    fn emit_token_check_kw(&mut self, kind: TokenKind) -> MODE::Tok {
+        self.emit_token_impl(kind, /* check_kw = */ true)
     }
 
     fn read_ascii_char(&mut self) -> AsciiChar {
@@ -867,7 +855,7 @@ lazy_static! {
     static ref SINGLE_CHAR_TOKENS: Vec<TokenKind> = {
         let mut vec = Vec::with_capacity(256);
         for i in 0..256 {
-            vec.push(TokenKind::Error);
+            vec.push(TokenKind::error());
         }
 
         {
@@ -875,18 +863,18 @@ lazy_static! {
                 assert!((ch as usize) <= 256);
                 vec[ch as usize] = kind;
             };
-            update_vec('(', TokenKind::OpenParen);
-            update_vec(')', TokenKind::CloseParen);
-            update_vec('[', TokenKind::OpenBracket);
-            update_vec(']', TokenKind::CloseBracket);
-            update_vec('{', TokenKind::OpenBrace);
-            update_vec('}', TokenKind::CloseBrace);
-            update_vec('.', TokenKind::Dot);
-            update_vec(';', TokenKind::Semicolon);
-            update_vec(',', TokenKind::Comma);
-            update_vec('?', TokenKind::Question);
-            update_vec(':', TokenKind::Colon);
-            update_vec('~', TokenKind::Tilde);
+            update_vec('(', TokenKind::open_paren());
+            update_vec(')', TokenKind::close_paren());
+            update_vec('[', TokenKind::open_bracket());
+            update_vec(']', TokenKind::close_bracket());
+            update_vec('{', TokenKind::open_brace());
+            update_vec('}', TokenKind::close_brace());
+            update_vec('.', TokenKind::dot());
+            update_vec(';', TokenKind::semicolon());
+            update_vec(',', TokenKind::comma());
+            update_vec('?', TokenKind::question());
+            update_vec(':', TokenKind::colon());
+            update_vec('~', TokenKind::tilde());
         }
         vec
     };
