@@ -1,7 +1,10 @@
 
+use parser::ast_builder::FullToken;
+
 pub enum AstKind {
     Program,
     BlockStatement,
+    VarStatement,
     ExpressionStatement
 }
 
@@ -36,7 +39,7 @@ impl AstNode for ProgramNode {
 }
 
 /*****************************************************************************
- **** BlockNode **************************************************************
+ **** BlockStatementNode *****************************************************
  *****************************************************************************/
 pub struct BlockStatementNode {
 }
@@ -48,6 +51,32 @@ impl BlockStatementNode {
 impl AstNode for BlockStatementNode {
     fn kind(&self) -> AstKind {
         AstKind::BlockStatement
+    }
+}
+
+/*****************************************************************************
+ **** VarStatementNode *******************************************************
+ *****************************************************************************/
+pub struct VarStatementNode {
+    variables: Vec<Box<FullToken>>
+}
+impl VarStatementNode {
+    pub fn new() -> VarStatementNode {
+        VarStatementNode {
+            variables: Vec::with_capacity(1)
+        }
+    }
+
+    pub fn variables(&self) -> &Vec<Box<FullToken>> {
+        &self.variables
+    }
+    pub fn add_variable(&mut self, var: FullToken) {
+        self.variables.push(Box::new(var));
+    }
+}
+impl AstNode for VarStatementNode {
+    fn kind(&self) -> AstKind {
+        AstKind::VarStatement
     }
 }
 

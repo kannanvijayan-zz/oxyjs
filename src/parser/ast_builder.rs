@@ -57,7 +57,9 @@ impl TokenizerMode for FullTokenizerMode {
 pub enum ParseError {
     None,
     TokenizerError(TokenError),
-    UnexpectedToken{expected:TokenKind, got:TokenKind}
+    UnexpectedToken{expected:TokenKind, got:TokenKind},
+    ExpectedVariableName,
+    ExpectedCommaOrSemicolon
 }
 pub type ParseResult<T> = Result<T, ParseError>;
 pub type MaybeParseResult<T> = ParseResult<Option<T>>;
@@ -113,15 +115,42 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         let begin_position = self.mark_position();
         let tok = self.next_token();
         if tok.kind().is_open_brace() {
-            let block = self.parse_block()?;
-            return Ok(Some(Box::new(block)));
+            return Ok(Some(Box::new(self.parse_block_statement()?)));
         }
+        if tok.kind().is_var_keyword() {
+            return Ok(Some(Box::new(self.parse_var_statement()?)));
+        }
+        self.rewind_position(begin_position);
         Ok(None)
     }
 
-    fn parse_block(&mut self) -> ParseResult<ast::BlockStatementNode> {
+    fn parse_block_statement(&mut self) -> ParseResult<ast::BlockStatementNode> {
+        // FIXME: Parse list of statements.
         self.must_expect_token(TokenKind::close_brace())?;
         Ok(ast::BlockStatementNode::new())
+    }
+
+    fn parse_var_statement(&mut self) -> ParseResult<ast::VarStatementNode> {
+        let mut var_statement = ast::VarStatementNode::new();
+        loop {
+            // FIXME: Support initializer expressions.
+            // For now, we match only a VarName ("," VarName)* ";"
+            let name_token = match self.expect_get_token(TokenKind::identifier()) {
+                Some(token) => token,
+                None => { return Err(ParseError::ExpectedVariableName); }
+            };
+            var_statement.add_variable(name_token);
+
+            let next_tok = self.next_token();
+            if next_tok.kind().is_semicolon() {
+                break;
+            }
+            if next_tok.kind().is_comma() {
+                continue;
+            }
+            return Err(ParseError::ExpectedCommaOrSemicolon);
+        }
+        Ok(var_statement)
     }
 
     fn must_expect_token(&mut self, kind: TokenKind) -> ParseResult<()> {
