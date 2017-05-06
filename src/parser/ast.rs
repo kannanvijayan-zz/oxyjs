@@ -10,6 +10,7 @@ pub enum AstKind {
     BlockStatement,
     VarStatement,
     EmptyStatement,
+    IfStatement,
     ExpressionStatement
 }
 impl AstKind {
@@ -149,6 +150,46 @@ impl AstNode for EmptyStatementNode {
 
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("Empty{}")
+    }
+}
+
+/*****************************************************************************
+ **** IfStatementNode ********************************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct IfStatementNode {
+    condition_expression: Box<AstNode>,
+    if_statement: Box<AstNode>
+}
+impl IfStatementNode {
+    pub fn new_if(condition_expression: Box<AstNode>, if_statement: Box<AstNode>)
+        -> IfStatementNode
+    {
+        IfStatementNode {
+            condition_expression: condition_expression,
+            if_statement: if_statement
+        }
+    }
+
+    pub fn condition_expression(&self) -> &AstNode {
+        self.condition_expression.as_ref()
+    }
+    pub fn if_statement(&self) -> &AstNode {
+        self.if_statement.as_ref()
+    }
+}
+impl AstNode for IfStatementNode {
+    fn kind(&self) -> AstKind {
+        AstKind::IfStatement
+    }
+
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("If(")?;
+        self.condition_expression.write_tree(w)?;
+        w.write_str("){")?;
+        self.if_statement.write_tree(w)?;
+        w.write_str("}")?;
+        Ok(())
     }
 }
 

@@ -125,6 +125,9 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         if tok.kind().is_semicolon() {
             return Ok(Some(Box::new(ast::EmptyStatementNode::new())));
         }
+        if tok.kind().is_if_keyword() {
+            return Ok(Some(self.parse_if_statement()?));
+        }
         self.rewind_position(begin_position);
         Ok(None)
     }
@@ -156,6 +159,11 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             return Err(ParseError::ExpectedCommaOrSemicolon);
         }
         Ok(var_statement)
+    }
+
+    fn parse_if_statement(&mut self) -> ParseResult<Box<AstNode>> {
+        // FIXME: implement this after expression parsing is supported.
+        panic!("parse_if_statement is not implemented.")
     }
 
     fn must_expect_token(&mut self, kind: TokenKind) -> ParseResult<()> {
