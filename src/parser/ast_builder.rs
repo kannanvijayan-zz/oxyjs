@@ -98,6 +98,10 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 }
             }
         }
+
+        // Must have reached end of stream.
+        self.must_expect_token(TokenKind::end())?;
+
         Ok(Box::new(program_node))
     }
 
@@ -117,6 +121,9 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         }
         if tok.kind().is_var_keyword() {
             return Ok(Some(Box::new(self.parse_var_statement()?)));
+        }
+        if tok.kind().is_semicolon() {
+            return Ok(Some(Box::new(ast::EmptyStatementNode::new())));
         }
         self.rewind_position(begin_position);
         Ok(None)

@@ -9,6 +9,7 @@ pub enum AstKind {
     Program,
     BlockStatement,
     VarStatement,
+    EmptyStatement,
     ExpressionStatement
 }
 impl AstKind {
@@ -130,6 +131,26 @@ impl AstNode for VarStatementNode {
     }
 }
 
+/*****************************************************************************
+ **** EmptyStatementNode *****************************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct EmptyStatementNode {
+}
+impl EmptyStatementNode {
+    pub fn new() -> EmptyStatementNode {
+        EmptyStatementNode {}
+    }
+}
+impl AstNode for EmptyStatementNode {
+    fn kind(&self) -> AstKind {
+        AstKind::EmptyStatement
+    }
+
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("Empty{}")
+    }
+}
 
 /*****************************************************************************
  **** ExpressionStatementNode ************************************************
