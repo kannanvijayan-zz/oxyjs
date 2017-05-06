@@ -1,4 +1,5 @@
 
+use std::fmt;
 use parser::char_utils::AsciiChar;
 use parser::input_stream::{InputStream, StreamPosition};
 use parser::token_kind::TokenKind;
@@ -50,6 +51,12 @@ pub trait Token where Self: Clone + Eq {
     fn make(kind: TokenKind, location: TokenLocation) -> Self;
     fn kind(&self) -> TokenKind;
     fn start_offset(&self) -> StreamPosition;
+    fn write_token(&self, w: &mut fmt::Write) -> Result<(), fmt::Error>;
+    fn token_string(&self) -> String {
+        let mut str = String::new();
+        self.write_token(&mut str).unwrap();
+        str
+    }
 }
 
 /**

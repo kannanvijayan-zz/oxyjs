@@ -1,6 +1,8 @@
 
 use std::fmt;
+
 use parser::ast_builder::FullToken;
+use parser::tokenizer::Token;
 
 #[derive(Debug, Clone, Copy)]
 pub enum AstKind {
@@ -9,14 +11,21 @@ pub enum AstKind {
     VarStatement,
     ExpressionStatement
 }
-impl fmt::Display for AstKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{:?}", self)
+impl AstKind {
+    fn to_string(&self) -> String {
+        format!("{:?}", self)
     }
 }
 
-pub trait AstNode where Self: fmt::Debug + fmt::Display {
+pub trait AstNode where Self: fmt::Debug {
     fn kind(&self) -> AstKind;
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error>;
+
+    fn tree_string(&self) -> String {
+        let mut str = String::new();
+        self.write_tree(&mut str).unwrap();
+        str
+    }
 }
 
 /*****************************************************************************
@@ -44,19 +53,18 @@ impl AstNode for ProgramNode {
     fn kind(&self) -> AstKind {
         AstKind::Program
     }
-}
-impl fmt::Display for ProgramNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.write_str("ProgramNode{")?;
+
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("ProgramNode{")?;
         let mut first = true;
         for source_element in &self.source_elements {
             if ! first {
-                f.write_str(", ")?;
+                w.write_str(", ")?;
             }
             first = false;
-            write!(f, "{}", source_element)?;
+            source_element.write_tree(w)?;
         }
-        f.write_str("}")?;
+        w.write_str("}")?;
         Ok(())
     }
 }
@@ -76,10 +84,8 @@ impl AstNode for BlockStatementNode {
     fn kind(&self) -> AstKind {
         AstKind::BlockStatement
     }
-}
-impl fmt::Display for BlockStatementNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.write_str("Block{}")
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("Block{}")
     }
 }
 
@@ -108,19 +114,18 @@ impl AstNode for VarStatementNode {
     fn kind(&self) -> AstKind {
         AstKind::VarStatement
     }
-}
-impl fmt::Display for VarStatementNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.write_str("Var{")?;
+
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("Var{")?;
         let mut first = true;
         for variable in &self.variables {
             if ! first {
-                f.write_str(", ")?;
+                w.write_str(", ")?;
             }
             first = false;
-            write!(f, "{}", variable)?;
+            variable.write_token(w)?;
         }
-        f.write_str("}")?;
+        w.write_str("}")?;
         Ok(())
     }
 }
@@ -148,9 +153,7 @@ impl AstNode for ExpressionStatementNode {
     fn kind(&self) -> AstKind {
         AstKind::ExpressionStatement
     }
-}
-impl fmt::Display for ExpressionStatementNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.write_str("ExpressionStatement{}")
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("ExpressionStatement{}")
     }
 }

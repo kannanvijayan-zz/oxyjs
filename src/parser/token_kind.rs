@@ -1,13 +1,11 @@
 
-use std::fmt;
-
 // TODO: Use macros to make this file not suck so much.
 
 /** The enum of all token kinds. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TokenKind(u8);
 impl TokenKind {
-    pub fn name(self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         TOKEN_STRINGS[self.0 as usize]
     }
 
@@ -595,11 +593,6 @@ impl TokenKind {
 
     pub fn is_keyword(&self) -> bool {
         (self.0 >= MIN_KEYWORD_TOK_ID) && (self.0 <= MAX_KEYWORD_TOK_ID)
-    }
-}
-impl fmt::Display for TokenKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "TokenKind({})", self.name())
     }
 }
 

@@ -35,10 +35,8 @@ impl Token for FullToken {
     fn start_offset(&self) -> StreamPosition {
         self.location.start_offset()
     }
-}
-impl fmt::Display for FullToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Token({}, {})", self.kind.name(), self.location.range_string())
+    fn write_token(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        write!(w, "Token({}@{})", self.kind.name(), self.location.range_string())
     }
 }
 
@@ -78,7 +76,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         // Just read tokens and print them out until we're done, then return Error.
         loop {
             let token = self.next_token();
-            println!("Token: {}", token.kind());
+            println!("Token: {}", token.kind().name());
             if token.kind().is_error() {
                 panic!("Got token error: {:?}", self.tokenizer.get_error());
             }
@@ -215,7 +213,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             }
             let kw_str = if check_kw { "kw" } else { "no-kw" };
             let nl_str = if want_newlines { "nl" } else { "no-nl" };
-            println!("next_token({}, {}): {}", kw_str, nl_str, token);
+            println!("next_token({}, {}): {}", kw_str, nl_str, token.token_string());
             return token;
         }
     }

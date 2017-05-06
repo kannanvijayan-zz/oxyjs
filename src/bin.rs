@@ -1,6 +1,7 @@
 
 extern crate liboxyjs;
 
+use liboxyjs::parser::ast::AstNode;
 use liboxyjs::parser::ast_builder::AstBuilder;
 use liboxyjs::parser::input_stream::VecInputStream;
 use std::io;
@@ -19,5 +20,5 @@ fn main() {
     let mut builder = AstBuilder::new(stream);
 
     let program = builder.parse_program().unwrap();
-    println!("Parsed program: {}", program)
+    println!("Parsed program: {}", program.tree_string())
 }

@@ -44,7 +44,7 @@ pub struct VecInputStream {
     data_cur: *const u8,
     data_end: *const u8,
     data_start: *const u8,
-    data: Vec<u8>,
+    data: Vec<u8>
 }
 
 impl VecInputStream {
