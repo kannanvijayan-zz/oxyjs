@@ -2,11 +2,15 @@
 use parser::char_utils::{AsciiChar, NonAsciiChar};
 use std::slice;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StreamPosition(u32);
 impl StreamPosition {
     pub fn default() -> StreamPosition {
         StreamPosition(u32::max_value())
+    }
+
+    pub fn value(self) -> u32 {
+        self.0
     }
 
     pub fn length_from(self, other: StreamPosition) -> u32 {

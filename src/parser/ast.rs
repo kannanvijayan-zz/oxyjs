@@ -1,21 +1,19 @@
 
 pub enum AstKind {
     Program,
+    BlockStatement,
     ExpressionStatement
 }
 
 pub trait AstNode {
     fn kind(&self) -> AstKind;
 }
-pub trait SourceElement : AstNode {}
-pub trait Statement : SourceElement {}
-pub trait Expression : AstNode {}
 
 /*****************************************************************************
  **** ProgramNode ************************************************************
  *****************************************************************************/
 pub struct ProgramNode {
-    source_elements: Vec<Box<SourceElement>>
+    source_elements: Vec<Box<AstNode>>
 }
 impl ProgramNode {
     pub fn new() -> ProgramNode {
@@ -24,10 +22,10 @@ impl ProgramNode {
         }
     }
 
-    pub fn source_elements(&self) -> &Vec<Box<SourceElement>> {
+    pub fn source_elements(&self) -> &Vec<Box<AstNode>> {
         &self.source_elements
     }
-    pub fn add_source_element(&mut self, source_element: Box<SourceElement>) {
+    pub fn add_source_element(&mut self, source_element: Box<AstNode>) {
         self.source_elements.push(source_element);
     }
 }
@@ -37,21 +35,37 @@ impl AstNode for ProgramNode {
     }
 }
 
+/*****************************************************************************
+ **** BlockNode **************************************************************
+ *****************************************************************************/
+pub struct BlockStatementNode {
+}
+impl BlockStatementNode {
+    pub fn new() -> BlockStatementNode {
+        BlockStatementNode {}
+    }
+}
+impl AstNode for BlockStatementNode {
+    fn kind(&self) -> AstKind {
+        AstKind::BlockStatement
+    }
+}
+
 
 /*****************************************************************************
  **** ExpressionStatementNode ************************************************
  *****************************************************************************/
 pub struct ExpressionStatementNode {
-    expression: Box<Expression>
+    expression: Box<AstNode>
 }
 impl ExpressionStatementNode {
-    fn new(expression: Box<Expression>) -> ExpressionStatementNode {
+    fn new(expression: Box<AstNode>) -> ExpressionStatementNode {
         ExpressionStatementNode {
             expression: expression
         }
     }
 
-    fn expression(&self) -> &Expression {
+    fn expression(&self) -> &AstNode {
         self.expression.as_ref()
     }
 }
@@ -60,5 +74,3 @@ impl AstNode for ExpressionStatementNode {
         AstKind::ExpressionStatement
     }
 }
-impl SourceElement for ExpressionStatementNode {}
-impl Statement for ExpressionStatementNode {}

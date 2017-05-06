@@ -13,7 +13,7 @@ pub enum TokenError {
 }
 
 /** Raw information required to extract the token from the source text. */
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenLocation {
     start_offset: StreamPosition,
     end_offset: StreamPosition
@@ -35,6 +35,10 @@ impl TokenLocation {
     pub fn end_offset(&self) -> StreamPosition {
         self.end_offset
     }
+
+    pub fn range_string(&self) -> String {
+        format!("{}-{}", self.start_offset.value(), self.end_offset.value())
+    }
 }
 
 /**
@@ -42,7 +46,7 @@ impl TokenLocation {
  * The implementors of this will be a FullToken or a SyntaxToken, depending
  * on the kind of parse we're doiing.
  */
-pub trait Token where Self: Clone {
+pub trait Token where Self: Clone + Eq {
     fn make(kind: TokenKind, location: TokenLocation) -> Self;
     fn kind(&self) -> TokenKind;
     fn start_offset(&self) -> StreamPosition;
@@ -66,6 +70,13 @@ pub trait TokenizerMode {
 }
 
 /**
+ * TokenizerPosition is similar to StreamPosition.  It records a position in
+ * the token stream we can rewind to.
+ */
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TokenizerPosition(usize);
+
+/**
  * The actual tokenizer is parameterized on the input stream type and the
  * token type we're using.
  *
@@ -80,8 +91,8 @@ pub struct Tokenizer<STREAM: InputStream, MODE: TokenizerMode> {
 
     buffer_start_position: StreamPosition,
     token_buffer: Vec<(MODE::Tok, bool)>,
+    token_buffer_start_index: usize,
     token_buffer_reverse_index: usize,
-    backtrack_point_enabled: bool
 }
 impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     where STREAM: InputStream,
@@ -94,9 +105,9 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             token_start_position: StreamPosition::default(),
             token_error: None,
             buffer_start_position: StreamPosition::default(),
-            token_buffer: Vec::with_capacity(4),
-            token_buffer_reverse_index: 0,
-            backtrack_point_enabled: false
+            token_buffer: Vec::with_capacity(16),
+            token_buffer_start_index: 0,
+            token_buffer_reverse_index: 0
         }
     }
 
@@ -108,42 +119,16 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     pub fn next_token(&mut self, check_kw: bool) -> MODE::Tok {
         assert!(self.token_error.is_none());
         if self.token_buffer_reverse_index > 0 {
-            match self.check_saved_token(check_kw) {
-                Some(tok) => { return tok; },
-                None => {}
+            if let Some(tok) = self.check_saved_token(check_kw) {
+                return tok;
             }
         }
         self.read_token(check_kw)
     }
 
-    pub fn set_backtrack_point(&mut self) {
-        // If we have saved tokens already, this sets the backtrack point to the
-        // current saved token position, which effectively means clearing all the saved
-        // tokens up to the current saved token index.
-        let idx = self.saved_token_index();
-        if idx > 0 {
-            self.token_buffer = self.token_buffer.split_off(idx);
-        }
-        self.backtrack_point_enabled = true;
-    }
-
-    pub fn rewind_backtrack_point(&mut self) {
-        assert!(self.backtrack_point_enabled);
-        self.token_buffer_reverse_index = self.token_buffer.len();
-    }
-
-    pub fn clear_backtrack_point(&mut self) {
-        assert!(self.backtrack_point_enabled);
-        // This is mostly the same as setting the backtrack point when its already set.
-        let idx = self.saved_token_index();
-        if idx > 0 {
-            self.token_buffer = self.token_buffer.split_off(idx);
-        }
-        self.backtrack_point_enabled = false;
-    }
-
     fn check_saved_token(&mut self, check_kw: bool) -> Option<MODE::Tok> {
         let idx = self.saved_token_index();
+        assert!(idx < self.token_buffer.len());
         let (token, token_check_kw) = {
             let token_checkkw_ref = unsafe { self.token_buffer.get_unchecked(idx) };
             (token_checkkw_ref.0.clone(), token_checkkw_ref.1)
@@ -158,11 +143,6 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
            (!check_kw && !token.kind().is_keyword())
         {
             self.token_buffer_reverse_index -= 1;
-            // If backtrack_point is disabled, and we've reached the end
-            // of saved tokens, clear the vector.
-            if !self.backtrack_point_enabled && self.token_buffer_reverse_index == 0 {
-                self.token_buffer.clear();
-            }
             return Some(token);
         }
 
@@ -174,6 +154,56 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         None
     }
 
+    pub fn mark_position(&self) -> TokenizerPosition {
+        TokenizerPosition(self.token_buffer_start_index + self.saved_token_index())
+    }
+    pub fn rewind_position(&mut self, position: TokenizerPosition) {
+        assert!(position.0 >= self.token_buffer_start_index);
+
+        let buffer_index = position.0 - self.token_buffer_start_index;
+        assert!(buffer_index < self.token_buffer.len());
+
+        self.token_buffer_reverse_index = self.token_buffer.len() - buffer_index;
+    }
+    pub fn clear_backtracking(&mut self) {
+        let length = self.token_buffer.len();
+        // If token buffer is small, ignore.
+        if length < 16 {
+            return;
+        }
+
+        // If token buffer can just be cleared, do that.  This should be the common case.
+        if self.token_buffer_reverse_index == 0 {
+            self.token_buffer_start_index += length;
+            self.token_buffer.clear();
+            return;
+        }
+
+        // If we can clear out more than half the buffer, do that.
+        if self.token_buffer_reverse_index > length/2 {
+            // We can use swap_remove to shift out the bottom tokens
+            // without allocating a new Vec.
+
+            let forward_skip = length - self.token_buffer_reverse_index;
+
+            // New length of vector will be self.token_buffer_reverse_index.
+            let mut cur = self.token_buffer_reverse_index - 1;
+            loop {
+                self.token_buffer.swap_remove(cur);
+                if cur == 0 {
+                    break;
+                }
+                cur -= 1;
+            }
+
+            self.token_buffer.truncate(self.token_buffer_reverse_index);
+            self.token_buffer_start_index += forward_skip;
+        }
+
+        // Otherwise do nothing.
+    }
+
+    #[inline(always)]
     fn saved_token_index(&self) -> usize {
         assert!(self.token_buffer_reverse_index <= self.token_buffer.len());
         self.token_buffer.len() - self.token_buffer_reverse_index
@@ -199,7 +229,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
 
         // Check single-char tokens.
         // Covers: Open/Close Paren/Bracket/Brace, Dot, Semicolon, Comma, Question, Colon, Tilde
-        let single_kind = check_single_char_token(ch0.octet_value_or_0xff());
+        let single_kind = check_single_char_token(ch0);
         if ! single_kind.is_error() {
             return self.emit_token(single_kind);
         }
@@ -826,9 +856,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         let token = self.tokenizer_mode.make_token(kind, token_location);
 
         assert!(self.token_buffer_reverse_index == 0);
-        if self.backtrack_point_enabled {
-            self.token_buffer.push((token.clone(), check_kw));
-        }
+        self.token_buffer.push((token.clone(), check_kw));
         token
     }
 
@@ -848,13 +876,13 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     }
 }
 
-fn check_single_char_token(octet: u8) -> TokenKind {
-    * unsafe { SINGLE_CHAR_TOKENS.get_unchecked(octet as usize) }
+fn check_single_char_token(ch: AsciiChar) -> TokenKind {
+    * unsafe { SINGLE_CHAR_TOKENS.get_unchecked(ch.octet_value_or_0xff() as usize) }
 }
 lazy_static! {
     static ref SINGLE_CHAR_TOKENS: Vec<TokenKind> = {
         let mut vec = Vec::with_capacity(256);
-        for i in 0..256 {
+        for i in 0..255 {
             vec.push(TokenKind::error());
         }
 
