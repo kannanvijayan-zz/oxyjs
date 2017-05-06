@@ -38,7 +38,7 @@ impl Token for FullToken {
 }
 impl fmt::Display for FullToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Token({}, {})", self.kind, self.location.range_string())
+        write!(f, "Token({}, {})", self.kind.name(), self.location.range_string())
     }
 }
 
@@ -184,7 +184,9 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             if !want_newlines && kind.is_newline() {
                 continue;
             }
-            println!("next_token(check_kw={}, want_newlines={}): {}", check_kw, want_newlines, token);
+            let kw_str = if check_kw { "kw" } else { "no-kw" };
+            let nl_str = if want_newlines { "nl" } else { "no-nl" };
+            println!("next_token({}, {}): {}", kw_str, nl_str, token);
             return token;
         }
     }
