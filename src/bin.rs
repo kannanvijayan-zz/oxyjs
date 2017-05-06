@@ -19,4 +19,5 @@ fn main() {
     let mut builder = AstBuilder::new(stream);
 
     let program = builder.parse_program().unwrap();
+    println!("Parsed program: {}", program)
 }
