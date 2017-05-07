@@ -3,10 +3,11 @@ use std::fmt;
 
 use parser::ast;
 use parser::ast::{AstKind, AstNode};
+use parser::input_stream::{InputStream, StreamPosition};
+use parser::precedence::Precedence;
 use parser::token_kind::TokenKind;
 use parser::tokenizer::{Token, TokenError, TokenLocation, Tokenizer, TokenizerMode,
                         TokenizerPosition};
-use parser::input_stream::{InputStream, StreamPosition};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FullToken {
@@ -54,10 +55,12 @@ impl TokenizerMode for FullTokenizerMode {
 #[derive(Debug, Clone)]
 pub enum ParseError {
     Unspecified,
+    ErrorToken(FullToken),
     TokenizerError(TokenError),
     UnexpectedToken{expected:TokenKind, got:TokenKind},
     ExpectedVariableName,
-    ExpectedCommaOrSemicolon
+    ExpectedCommaOrSemicolon,
+    ExpectedExpression
 }
 pub type ParseResult<T> = Result<T, ParseError>;
 pub type MaybeParseResult<T> = ParseResult<Option<T>>;
@@ -75,7 +78,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     pub fn read_and_print_tokens(&mut self) {
         // Just read tokens and print them out until we're done, then return Error.
         loop {
-            let token = self.next_token();
+            let token = self.next_token().unwrap();
             println!("Token: {}", token.kind().name());
             if token.kind().is_error() {
                 panic!("Got token error: {:?}", self.tokenizer.get_error());
@@ -89,7 +92,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     pub fn parse_program(&mut self) -> ParseResult<Box<ast::ProgramNode>> {
         let mut program_node = ast::ProgramNode::new();
         loop {
-            match self.try_parse_statement_or_func_decl()? {
+            match self.try_parse_statement()? {
                 Some(boxed_source_element) => {
                     program_node.add_source_element(boxed_source_element);
                 }
@@ -105,9 +108,9 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         Ok(Box::new(program_node))
     }
 
-    fn try_parse_statement_or_func_decl(&mut self) -> MaybeParseResult<Box<AstNode>> {
+    fn try_parse_statement(&mut self) -> MaybeParseResult<Box<AstNode>> {
         let begin_position = self.mark_position();
-        let tok = self.next_token();
+        let tok = self.next_token()?;
         if tok.kind().is_open_brace() {
             // FIXME: parse either a block or an object literal.
             // The spec says a '{' at the statement level can only be a block,
@@ -124,8 +127,8 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             return Ok(Some(self.parse_if_statement()?));
         }
 
-        if let Some(expr_stmt) = self.try_parse_expression_statement(tok)? {
-            return Ok(Some(Box::new(expr_stmt)));
+        if let Some(boxed_expr) = self.try_parse_expression(tok, Precedence::lowest())? {
+            return Ok(Some(Box::new(ast::ExpressionStatementNode::new(boxed_expr))));
         }
 
         self.rewind_position(begin_position);
@@ -143,13 +146,13 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         loop {
             // FIXME: Support initializer expressions.
             // For now, we match only a VarName ("," VarName)* ";"
-            let name_token = match self.expect_get_token(TokenKind::identifier()) {
+            let name_token = match self.expect_get_token(TokenKind::identifier())? {
                 Some(token) => token,
                 None => { return Err(ParseError::ExpectedVariableName); }
             };
             var_statement.add_variable(name_token);
 
-            let next_tok = self.next_token();
+            let next_tok = self.next_token()?;
             if next_tok.kind().is_semicolon() {
                 break;
             }
@@ -166,28 +169,60 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         panic!("parse_if_statement is not implemented.")
     }
 
-    fn try_parse_expression_statement(&mut self, tok: FullToken)
-        -> MaybeParseResult<ast::ExpressionStatementNode>
-    {
-        let expr = if tok.kind().is_identifier() {
-            let name_expr = Box::new(ast::NameExpressionNode::new(tok));
-            self.parse_rest_of_expression(name_expr)?
-        } else {
-            return Ok(None);
-        };
+    fn parse_expression(&mut self, precedence: Precedence) -> ParseResult<Box<AstNode>> {
+        println!("BEGIN (parse_expression)");
+        let token = self.next_token()?;
+        if let Some(boxed_expr) = self.try_parse_expression(token, precedence)? {
+            println!("END (parse_expression)");
+            return Ok(boxed_expr);
+        }
 
-        Ok(Some(ast::ExpressionStatementNode::new(expr)))
+        Err(ParseError::ExpectedExpression)
     }
 
-    fn parse_rest_of_expression(&mut self, left_expr: Box<AstNode>) -> ParseResult<Box<AstNode>> {
+    fn try_parse_expression(&mut self, tok: FullToken, precedence: Precedence)
+        -> MaybeParseResult<Box<AstNode>>
+    {
+        if tok.kind().is_identifier() {
+            let name_expr = Box::new(ast::NameExpressionNode::new(tok));
+            return Ok(Some(self.parse_rest_of_expression(name_expr, precedence)?));
+        }
+        Ok(None)
+    }
+
+    fn parse_rest_of_expression(&mut self, left_expr: Box<AstNode>, precedence: Precedence)
+        -> ParseResult<Box<AstNode>>
+    {
         assert!(left_expr.is_expression());
-        Err(ParseError::Unspecified)
+
+        let mut cur_expr = left_expr;
+        loop {
+            let position = self.mark_position();
+            let tok = self.next_token()?;
+            if tok.kind.is_comma() {
+                if precedence >= Precedence::comma() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                // Accumulate any commas.
+                let right_expr = self.parse_expression(Precedence::comma())?;
+                cur_expr = Box::new(ast::CommaExpressionNode::new(cur_expr, right_expr));
+                continue;
+            }
+
+            // Unknown token terminates expression.
+            self.rewind_position(position);
+            break;
+        }
+
+        Ok(cur_expr)
     }
 
     fn must_expect_token(&mut self, kind: TokenKind) -> ParseResult<()> {
         // Mark the position so we can backtrack.
         let position = self.mark_position();
-        let token = self.next_token();
+        let token = self.next_token()?;
         if token.kind() == kind {
             Ok(())
         } else {
@@ -196,26 +231,26 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         }
     }
 
-    fn expect_token(&mut self, kind: TokenKind) -> bool {
+    fn expect_token(&mut self, kind: TokenKind) -> ParseResult<bool> {
         // Mark the position so we can backtrack.
         let position = self.mark_position();
-        let token = self.next_token();
+        let token = self.next_token()?;
         if token.kind() == kind {
-            true
+            Ok(true)
         } else {
             self.rewind_position(position);
-            false
+            Ok(false)
         }
     }
-    fn expect_get_token(&mut self, kind: TokenKind) -> Option<FullToken> {
+    fn expect_get_token(&mut self, kind: TokenKind) -> ParseResult<Option<FullToken>> {
         // Mark the position so we can backtrack.
         let position = self.mark_position();
-        let token = self.next_token();
+        let token = self.next_token()?;
         if token.kind() == kind {
-            Some(token)
+            Ok(Some(token))
         } else {
             self.rewind_position(position);
-            None
+            Ok(None)
         }
     }
 
@@ -226,14 +261,14 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         self.tokenizer.rewind_position(position)
     }
 
-    fn next_token(&mut self) -> FullToken {
+    fn next_token(&mut self) -> ParseResult<FullToken> {
         self.next_token_impl(/* check_kw = */ true, /* want_newlines = */ false)
     }
-    fn next_token_no_keywords(&mut self) -> FullToken {
+    fn next_token_no_keywords(&mut self) -> ParseResult<FullToken> {
         self.next_token_impl(/* check_kw = */ true, /* want_newlines = */ false)
     }
 
-    fn next_token_impl(&mut self, check_kw: bool, want_newlines: bool) -> FullToken {
+    fn next_token_impl(&mut self, check_kw: bool, want_newlines: bool) -> ParseResult<FullToken> {
         loop {
             let token = self.tokenizer.next_token(/* check_kw = */ true);
             let kind = token.kind();
@@ -244,10 +279,13 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             if !want_newlines && kind.is_newline() {
                 continue;
             }
+            if kind.is_error() {
+                return Err(ParseError::ErrorToken(token));
+            }
             let kw_str = if check_kw { "kw" } else { "no-kw" };
             let nl_str = if want_newlines { "nl" } else { "no-nl" };
             println!("next_token({}, {}): {}", kw_str, nl_str, token.token_string());
-            return token;
+            return Ok(token);
         }
     }
 }

@@ -13,6 +13,7 @@ pub enum AstKind {
     IfStatement,
     ExpressionStatement,
 
+    CommaExpression,
     NameExpression
 }
 impl AstKind {
@@ -256,7 +257,55 @@ impl AstNode for ExpressionStatementNode {
         false
     }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
-        w.write_str("ExpressionStatement{}")
+        w.write_str("ExpressionStatement{")?;
+        self.expression.write_tree(w)?;
+        w.write_str("}")?;
+        Ok(())
+    }
+}
+
+/*****************************************************************************
+ **** CommaExpressionNode ****************************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct CommaExpressionNode {
+    left_expr: Box<AstNode>,
+    right_expr: Box<AstNode>
+}
+impl CommaExpressionNode {
+    pub fn new(left_expr: Box<AstNode>, right_expr: Box<AstNode>) -> CommaExpressionNode {
+        assert!(left_expr.is_expression());
+        assert!(right_expr.is_expression());
+        CommaExpressionNode {
+            left_expr: left_expr,
+            right_expr: right_expr
+        }
+    }
+
+    pub fn left_expr(&self) -> &AstNode {
+        self.left_expr.as_ref()
+    }
+    pub fn right_expr(&self) -> &AstNode {
+        self.right_expr.as_ref()
+    }
+}
+impl AstNode for CommaExpressionNode {
+    fn kind(&self) -> AstKind {
+        AstKind::CommaExpression
+    }
+    fn is_statement(&self) -> bool {
+        false
+    }
+    fn is_expression(&self) -> bool {
+        true
+    }
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("CommaExpr{")?;
+        self.left_expr.write_tree(w)?;
+        w.write_str(", ")?;
+        self.right_expr.write_tree(w)?;
+        w.write_str("}")?;
+        Ok(())
     }
 }
 
