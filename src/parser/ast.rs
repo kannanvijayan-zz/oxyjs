@@ -11,7 +11,9 @@ pub enum AstKind {
     VarStatement,
     EmptyStatement,
     IfStatement,
-    ExpressionStatement
+    ExpressionStatement,
+
+    NameExpression
 }
 impl AstKind {
     fn to_string(&self) -> String {
@@ -21,6 +23,8 @@ impl AstKind {
 
 pub trait AstNode where Self: fmt::Debug {
     fn kind(&self) -> AstKind;
+    fn is_statement(&self) -> bool;
+    fn is_expression(&self) -> bool;
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error>;
 
     fn tree_string(&self) -> String {
@@ -55,6 +59,12 @@ impl AstNode for ProgramNode {
     fn kind(&self) -> AstKind {
         AstKind::Program
     }
+    fn is_statement(&self) -> bool {
+        false
+    }
+    fn is_expression(&self) -> bool {
+        false
+    }
 
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("ProgramNode{")?;
@@ -86,6 +96,12 @@ impl AstNode for BlockStatementNode {
     fn kind(&self) -> AstKind {
         AstKind::BlockStatement
     }
+    fn is_statement(&self) -> bool {
+        true
+    }
+    fn is_expression(&self) -> bool {
+        false
+    }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("Block{}")
     }
@@ -115,6 +131,12 @@ impl VarStatementNode {
 impl AstNode for VarStatementNode {
     fn kind(&self) -> AstKind {
         AstKind::VarStatement
+    }
+    fn is_statement(&self) -> bool {
+        true
+    }
+    fn is_expression(&self) -> bool {
+        false
     }
 
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
@@ -146,6 +168,12 @@ impl EmptyStatementNode {
 impl AstNode for EmptyStatementNode {
     fn kind(&self) -> AstKind {
         AstKind::EmptyStatement
+    }
+    fn is_statement(&self) -> bool {
+        true
+    }
+    fn is_expression(&self) -> bool {
+        false
     }
 
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
@@ -182,6 +210,12 @@ impl AstNode for IfStatementNode {
     fn kind(&self) -> AstKind {
         AstKind::IfStatement
     }
+    fn is_statement(&self) -> bool {
+        true
+    }
+    fn is_expression(&self) -> bool {
+        false
+    }
 
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("If(")?;
@@ -201,13 +235,13 @@ pub struct ExpressionStatementNode {
     expression: Box<AstNode>
 }
 impl ExpressionStatementNode {
-    fn new(expression: Box<AstNode>) -> ExpressionStatementNode {
+    pub fn new(expression: Box<AstNode>) -> ExpressionStatementNode {
         ExpressionStatementNode {
             expression: expression
         }
     }
 
-    fn expression(&self) -> &AstNode {
+    pub fn expression(&self) -> &AstNode {
         self.expression.as_ref()
     }
 }
@@ -215,7 +249,50 @@ impl AstNode for ExpressionStatementNode {
     fn kind(&self) -> AstKind {
         AstKind::ExpressionStatement
     }
+    fn is_statement(&self) -> bool {
+        true
+    }
+    fn is_expression(&self) -> bool {
+        false
+    }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("ExpressionStatement{}")
+    }
+}
+
+/*****************************************************************************
+ **** NameExpressionNode *****************************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct NameExpressionNode {
+    name: FullToken
+}
+impl NameExpressionNode {
+    pub fn new(name: FullToken) -> NameExpressionNode {
+        assert!(name.kind().is_identifier());
+        NameExpressionNode {
+            name: name
+        }
+    }
+
+    pub fn name(&self) -> &FullToken {
+        &self.name
+    }
+}
+impl AstNode for NameExpressionNode {
+    fn kind(&self) -> AstKind {
+        AstKind::NameExpression
+    }
+    fn is_statement(&self) -> bool {
+        false
+    }
+    fn is_expression(&self) -> bool {
+        true
+    }
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("NameExpr{")?;
+        self.name.write_token(w);
+        w.write_str("}")?;
+        Ok(())
     }
 }

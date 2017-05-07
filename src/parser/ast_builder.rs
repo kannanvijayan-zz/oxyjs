@@ -53,7 +53,7 @@ impl TokenizerMode for FullTokenizerMode {
 
 #[derive(Debug, Clone)]
 pub enum ParseError {
-    None,
+    Unspecified,
     TokenizerError(TokenError),
     UnexpectedToken{expected:TokenKind, got:TokenKind},
     ExpectedVariableName,
@@ -89,9 +89,9 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     pub fn parse_program(&mut self) -> ParseResult<Box<ast::ProgramNode>> {
         let mut program_node = ast::ProgramNode::new();
         loop {
-            match self.try_parse_source_element()? {
-                Some(source_element_box) => {
-                    program_node.add_source_element(source_element_box);
+            match self.try_parse_statement_or_func_decl()? {
+                Some(boxed_source_element) => {
+                    program_node.add_source_element(boxed_source_element);
                 }
                 None => {
                     break;
@@ -105,18 +105,13 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         Ok(Box::new(program_node))
     }
 
-    fn try_parse_source_element(&mut self) -> MaybeParseResult<Box<AstNode>> {
-        // Try and parse a statement.
-        if let Some(stmt) = self.try_parse_statement()? {
-            return Ok(Some(stmt));
-        }
-        Ok(None)
-    }
-
-    fn try_parse_statement(&mut self) -> MaybeParseResult<Box<AstNode>> {
+    fn try_parse_statement_or_func_decl(&mut self) -> MaybeParseResult<Box<AstNode>> {
         let begin_position = self.mark_position();
         let tok = self.next_token();
         if tok.kind().is_open_brace() {
+            // FIXME: parse either a block or an object literal.
+            // The spec says a '{' at the statement level can only be a block,
+            // but practical implementations seem to allow bare object literals.
             return Ok(Some(Box::new(self.parse_block_statement()?)));
         }
         if tok.kind().is_var_keyword() {
@@ -128,6 +123,11 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         if tok.kind().is_if_keyword() {
             return Ok(Some(self.parse_if_statement()?));
         }
+
+        if let Some(expr_stmt) = self.try_parse_expression_statement(tok)? {
+            return Ok(Some(Box::new(expr_stmt)));
+        }
+
         self.rewind_position(begin_position);
         Ok(None)
     }
@@ -164,6 +164,24 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     fn parse_if_statement(&mut self) -> ParseResult<Box<AstNode>> {
         // FIXME: implement this after expression parsing is supported.
         panic!("parse_if_statement is not implemented.")
+    }
+
+    fn try_parse_expression_statement(&mut self, tok: FullToken)
+        -> MaybeParseResult<ast::ExpressionStatementNode>
+    {
+        let expr = if tok.kind().is_identifier() {
+            let name_expr = Box::new(ast::NameExpressionNode::new(tok));
+            self.parse_rest_of_expression(name_expr)?
+        } else {
+            return Ok(None);
+        };
+
+        Ok(Some(ast::ExpressionStatementNode::new(expr)))
+    }
+
+    fn parse_rest_of_expression(&mut self, left_expr: Box<AstNode>) -> ParseResult<Box<AstNode>> {
+        assert!(left_expr.is_expression());
+        Err(ParseError::Unspecified)
     }
 
     fn must_expect_token(&mut self, kind: TokenKind) -> ParseResult<()> {
