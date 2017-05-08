@@ -201,6 +201,10 @@ impl TokenKind {
         self.0 == TOK_STRICT_NOT_EQUAL.0
     }
 
+    pub fn is_equality_op(&self) -> bool {
+        (self.0 >= TOK_EQUAL.0) && (self.0 <= TOK_STRICT_NOT_EQUAL.0)
+    }
+
     pub fn less() -> TokenKind {
         TokenKind(TOK_LESS.0)
     }

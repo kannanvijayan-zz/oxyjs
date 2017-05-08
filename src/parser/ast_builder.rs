@@ -289,6 +289,17 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 continue;
             }
 
+            if tok.kind().is_equality_op() {
+                if precedence >= Precedence::equality() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::equality())?;
+                cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
             // Unknown token terminates expression.
             self.rewind_position(position);
             break;
