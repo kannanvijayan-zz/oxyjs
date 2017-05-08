@@ -224,6 +224,20 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 continue;
             }
 
+            if tok.kind().is_question() {
+                if precedence > Precedence::conditional() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let if_expr = self.parse_expression(Precedence::assignment())?;
+                self.must_expect_token(TokenKind::colon())?;
+                let else_expr = self.parse_expression(Precedence::assignment())?;
+                cur_expr = Box::new(ast::ConditionalExpressionNode::new(cur_expr, if_expr,
+                                                                        else_expr));
+                continue;
+            }
+
             // Unknown token terminates expression.
             self.rewind_position(position);
             break;

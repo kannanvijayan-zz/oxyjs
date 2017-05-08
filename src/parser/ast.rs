@@ -13,6 +13,7 @@ pub enum AstKind {
     IfStatement,
     ExpressionStatement,
 
+    ConditionalExpression,
     AssignmentExpression,
     CommaExpression,
     NameExpression
@@ -266,13 +267,68 @@ impl AstNode for ExpressionStatementNode {
 }
 
 /*****************************************************************************
+ **** ConditionalExpressionNode **********************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct ConditionalExpressionNode {
+    cond_expr: Box<AstNode>,
+    if_expr: Box<AstNode>,
+    else_expr: Box<AstNode>
+}
+impl ConditionalExpressionNode {
+    pub fn new(cond_expr: Box<AstNode>, if_expr: Box<AstNode>, else_expr: Box<AstNode>)
+        -> ConditionalExpressionNode
+    {
+        assert!(cond_expr.is_expression());
+        assert!(if_expr.is_expression());
+        assert!(else_expr.is_expression());
+        ConditionalExpressionNode {
+            cond_expr: cond_expr,
+            if_expr: if_expr,
+            else_expr: else_expr
+        }
+    }
+
+    pub fn cond_expr(&self) -> &AstNode {
+        self.cond_expr.as_ref()
+    }
+    pub fn if_expr(&self) -> &AstNode {
+        self.if_expr.as_ref()
+    }
+    pub fn else_expr(&self) -> &AstNode {
+        self.else_expr.as_ref()
+    }
+}
+impl AstNode for ConditionalExpressionNode {
+    fn kind(&self) -> AstKind {
+        AstKind::ConditionalExpression
+    }
+    fn is_statement(&self) -> bool {
+        false
+    }
+    fn is_expression(&self) -> bool {
+        true
+    }
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("ConditionalExpr{")?;
+        self.cond_expr.write_tree(w)?;
+        w.write_str(", ")?;
+        self.if_expr.write_tree(w)?;
+        w.write_str(", ")?;
+        self.else_expr.write_tree(w)?;
+        w.write_str("}")?;
+        Ok(())
+    }
+}
+
+/*****************************************************************************
  **** AssignmentExpressionNode ***********************************************
  *****************************************************************************/
 #[derive(Debug)]
 pub struct AssignmentExpressionNode {
     assignment_op: FullToken,
     left_expr: Box<AstNode>,
-    right_expr: Box<AstNode>,
+    right_expr: Box<AstNode>
 }
 impl AssignmentExpressionNode {
     pub fn new(assignment_op: FullToken, left_expr: Box<AstNode>, right_expr: Box<AstNode>)
