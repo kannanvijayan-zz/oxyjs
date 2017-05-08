@@ -115,10 +115,10 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             // FIXME: parse either a block or an object literal.
             // The spec says a '{' at the statement level can only be a block,
             // but practical implementations seem to allow bare object literals.
-            return Ok(Some(Box::new(self.parse_block_statement()?)));
+            return Ok(Some(self.parse_block_statement()?));
         }
         if tok.kind().is_var_keyword() {
-            return Ok(Some(Box::new(self.parse_var_statement()?)));
+            return Ok(Some(self.parse_var_statement()?));
         }
         if tok.kind().is_semicolon() {
             return Ok(Some(Box::new(ast::EmptyStmtNode::new())));
@@ -135,14 +135,14 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         Ok(None)
     }
 
-    fn parse_block_statement(&mut self) -> ParseResult<ast::BlockStmtNode> {
+    fn parse_block_statement(&mut self) -> ParseResult<Box<ast::BlockStmtNode>> {
         // FIXME: Parse list of statements.
         self.must_expect_token(TokenKind::close_brace())?;
-        Ok(ast::BlockStmtNode::new())
+        Ok(Box::new(ast::BlockStmtNode::new()))
     }
 
-    fn parse_var_statement(&mut self) -> ParseResult<ast::VarStmtNode> {
-        let mut var_statement = ast::VarStmtNode::new();
+    fn parse_var_statement(&mut self) -> ParseResult<Box<ast::VarStmtNode>> {
+        let mut var_statement = Box::new(ast::VarStmtNode::new());
         loop {
             // FIXME: Support initializer expressions.
             // For now, we match only a VarName ("," VarName)* ";"
