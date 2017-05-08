@@ -21,10 +21,7 @@ pub struct TokenLocation {
 }
 impl TokenLocation {
     pub fn new(start_offset: StreamPosition, end_offset: StreamPosition) -> TokenLocation {
-        TokenLocation {
-            start_offset: start_offset,
-            end_offset: end_offset
-        }
+        TokenLocation { start_offset, end_offset }
     }
     pub fn default() -> TokenLocation {
         Self::new(StreamPosition::default(), StreamPosition::default())

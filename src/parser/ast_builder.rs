@@ -16,10 +16,7 @@ pub struct FullToken {
 }
 impl FullToken {
     pub fn new(kind: TokenKind, location: TokenLocation) -> FullToken {
-        FullToken {
-            kind: kind,
-            location: location
-        }
+        FullToken { kind, location }
     }
 
     pub fn location(&self) -> &TokenLocation {

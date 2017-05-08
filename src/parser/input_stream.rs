@@ -53,12 +53,7 @@ impl VecInputStream {
         let data_end = unsafe { data_start.offset(data.len() as isize) };
         assert!(((data_end as usize) - (data_start as usize)) <= (u32::max_value() as usize));
         let data_cur = data_start;
-        VecInputStream {
-            data_cur: data_cur,
-            data_end: data_end,
-            data_start: data_start,
-            data: data
-        }
+        VecInputStream { data_cur, data_end, data_start, data }
     }
 
     pub fn current_offset(&self) -> u32 {
