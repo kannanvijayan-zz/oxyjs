@@ -182,7 +182,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         -> MaybeParseResult<Box<AstNode>>
     {
         if tok.kind().is_identifier() {
-            let name_expr = Box::new(ast::NameExpressionNode::new(tok));
+            let name_expr = Box::new(ast::NameExprNode::new(tok));
             return Ok(Some(self.parse_rest_of_expression(name_expr, precedence)?));
         }
         Ok(None)
@@ -204,7 +204,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 }
 
                 let right_expr = self.parse_expression(Precedence::comma())?;
-                cur_expr = Box::new(ast::CommaExpressionNode::new(cur_expr, right_expr));
+                cur_expr = Box::new(ast::CommaExprNode::new(cur_expr, right_expr));
                 continue;
             }
 
@@ -220,7 +220,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 }
 
                 let right_expr = self.parse_expression(Precedence::assignment())?;
-                cur_expr = Box::new(ast::AssignmentExpressionNode::new(tok, cur_expr, right_expr));
+                cur_expr = Box::new(ast::AssignExprNode::new(tok, cur_expr, right_expr));
                 continue;
             }
 
@@ -233,8 +233,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 let if_expr = self.parse_expression(Precedence::assignment())?;
                 self.must_expect_token(TokenKind::colon())?;
                 let else_expr = self.parse_expression(Precedence::assignment())?;
-                cur_expr = Box::new(ast::ConditionalExpressionNode::new(cur_expr, if_expr,
-                                                                        else_expr));
+                cur_expr = Box::new(ast::CondExprNode::new(cur_expr, if_expr, else_expr));
                 continue;
             }
 

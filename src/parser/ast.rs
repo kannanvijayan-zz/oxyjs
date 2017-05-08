@@ -13,10 +13,10 @@ pub enum AstKind {
     IfStmt,
     ExprStmt,
 
-    ConditionalExpression,
-    AssignmentExpression,
-    CommaExpression,
-    NameExpression
+    CondExpr,
+    AssignExpr,
+    CommaExpr,
+    NameExpr
 }
 impl AstKind {
     fn to_string(&self) -> String {
@@ -267,22 +267,22 @@ impl AstNode for ExprStmtNode {
 }
 
 /*****************************************************************************
- **** ConditionalExpressionNode **********************************************
+ **** CondExprNode ***********************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct ConditionalExpressionNode {
+pub struct CondExprNode {
     cond_expr: Box<AstNode>,
     if_expr: Box<AstNode>,
     else_expr: Box<AstNode>
 }
-impl ConditionalExpressionNode {
+impl CondExprNode {
     pub fn new(cond_expr: Box<AstNode>, if_expr: Box<AstNode>, else_expr: Box<AstNode>)
-        -> ConditionalExpressionNode
+        -> CondExprNode
     {
         assert!(cond_expr.is_expression());
         assert!(if_expr.is_expression());
         assert!(else_expr.is_expression());
-        ConditionalExpressionNode {
+        CondExprNode {
             cond_expr: cond_expr,
             if_expr: if_expr,
             else_expr: else_expr
@@ -299,9 +299,9 @@ impl ConditionalExpressionNode {
         self.else_expr.as_ref()
     }
 }
-impl AstNode for ConditionalExpressionNode {
+impl AstNode for CondExprNode {
     fn kind(&self) -> AstKind {
-        AstKind::ConditionalExpression
+        AstKind::CondExpr
     }
     fn is_statement(&self) -> bool {
         false
@@ -310,7 +310,7 @@ impl AstNode for ConditionalExpressionNode {
         true
     }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
-        w.write_str("ConditionalExpr{")?;
+        w.write_str("CondExpr{")?;
         self.cond_expr.write_tree(w)?;
         w.write_str(", ")?;
         self.if_expr.write_tree(w)?;
@@ -322,23 +322,23 @@ impl AstNode for ConditionalExpressionNode {
 }
 
 /*****************************************************************************
- **** AssignmentExpressionNode ***********************************************
+ **** AssignExprNode *********************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct AssignmentExpressionNode {
+pub struct AssignExprNode {
     assignment_op: FullToken,
     left_expr: Box<AstNode>,
     right_expr: Box<AstNode>
 }
-impl AssignmentExpressionNode {
+impl AssignExprNode {
     pub fn new(assignment_op: FullToken, left_expr: Box<AstNode>, right_expr: Box<AstNode>)
-        -> AssignmentExpressionNode
+        -> AssignExprNode
     {
         // FIXME: assert that left_expr is a valid lvalue expression.
         assert!(left_expr.is_expression());
         assert!(right_expr.is_expression());
         assert!(assignment_op.kind().is_assignment_op());
-        AssignmentExpressionNode {
+        AssignExprNode {
             assignment_op: assignment_op,
             left_expr: left_expr,
             right_expr: right_expr
@@ -355,9 +355,9 @@ impl AssignmentExpressionNode {
         self.right_expr.as_ref()
     }
 }
-impl AstNode for AssignmentExpressionNode {
+impl AstNode for AssignExprNode {
     fn kind(&self) -> AstKind {
-        AstKind::AssignmentExpression
+        AstKind::AssignExpr
     }
     fn is_statement(&self) -> bool {
         false
@@ -366,7 +366,7 @@ impl AstNode for AssignmentExpressionNode {
         true
     }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
-        w.write_str("AssignmentExpr(")?;
+        w.write_str("AssignExpr(")?;
         self.assignment_op.write_token(w)?;
         w.write_str("){")?;
         self.left_expr.write_tree(w)?;
@@ -378,18 +378,18 @@ impl AstNode for AssignmentExpressionNode {
 }
 
 /*****************************************************************************
- **** CommaExpressionNode ****************************************************
+ **** CommaExprNode **********************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct CommaExpressionNode {
+pub struct CommaExprNode {
     left_expr: Box<AstNode>,
     right_expr: Box<AstNode>
 }
-impl CommaExpressionNode {
-    pub fn new(left_expr: Box<AstNode>, right_expr: Box<AstNode>) -> CommaExpressionNode {
+impl CommaExprNode {
+    pub fn new(left_expr: Box<AstNode>, right_expr: Box<AstNode>) -> CommaExprNode {
         assert!(left_expr.is_expression());
         assert!(right_expr.is_expression());
-        CommaExpressionNode {
+        CommaExprNode {
             left_expr: left_expr,
             right_expr: right_expr
         }
@@ -402,9 +402,9 @@ impl CommaExpressionNode {
         self.right_expr.as_ref()
     }
 }
-impl AstNode for CommaExpressionNode {
+impl AstNode for CommaExprNode {
     fn kind(&self) -> AstKind {
-        AstKind::CommaExpression
+        AstKind::CommaExpr
     }
     fn is_statement(&self) -> bool {
         false
@@ -423,16 +423,16 @@ impl AstNode for CommaExpressionNode {
 }
 
 /*****************************************************************************
- **** NameExpressionNode *****************************************************
+ **** NameExprNode ***********************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct NameExpressionNode {
+pub struct NameExprNode {
     name: FullToken
 }
-impl NameExpressionNode {
-    pub fn new(name: FullToken) -> NameExpressionNode {
+impl NameExprNode {
+    pub fn new(name: FullToken) -> NameExprNode {
         assert!(name.kind().is_identifier());
-        NameExpressionNode {
+        NameExprNode {
             name: name
         }
     }
@@ -441,9 +441,9 @@ impl NameExpressionNode {
         &self.name
     }
 }
-impl AstNode for NameExpressionNode {
+impl AstNode for NameExprNode {
     fn kind(&self) -> AstKind {
-        AstKind::NameExpression
+        AstKind::NameExpr
     }
     fn is_statement(&self) -> bool {
         false
