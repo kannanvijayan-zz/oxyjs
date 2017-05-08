@@ -233,6 +233,11 @@ impl TokenKind {
         self.0 == TOK_GREATER_EQUAL.0
     }
 
+    pub fn is_relational_op(&self) -> bool {
+        ((self.0 >= TOK_LESS.0) && (self.0 <= TOK_GREATER_EQUAL.0)) ||
+            (self.0 == TOK_INSTANCEOF_KEYWORD.0)
+    }
+
 
     pub fn tilde() -> TokenKind {
         TokenKind(TOK_TILDE.0)
@@ -316,6 +321,10 @@ impl TokenKind {
     }
     pub fn is_arithmetic_shift_right(&self) -> bool {
         self.0 == TOK_ARITHMETIC_SHIFT_RIGHT.0
+    }
+
+    pub fn is_shift_op(&self) -> bool {
+        (self.0 >= TOK_SHIFT_LEFT.0) && (self.0 <= TOK_ARITHMETIC_SHIFT_RIGHT.0)
     }
 
     pub fn bit_and() -> TokenKind {

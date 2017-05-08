@@ -300,6 +300,50 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 continue;
             }
 
+            if tok.kind().is_relational_op() {
+                if precedence >= Precedence::relational() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::relational())?;
+                cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
+            if tok.kind().is_shift_op() {
+                if precedence >= Precedence::shift() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::shift())?;
+                cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
+            if tok.kind().is_plus() || tok.kind().is_minus() {
+                if precedence >= Precedence::additive() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::additive())?;
+                cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
+            if tok.kind().is_star() || tok.kind().is_slash() || tok.kind().is_percent() {
+                if precedence >= Precedence::multiplicative() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::multiplicative())?;
+                cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
             // Unknown token terminates expression.
             self.rewind_position(position);
             break;
