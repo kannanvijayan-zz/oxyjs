@@ -256,6 +256,39 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 continue;
             }
 
+            if tok.kind().is_bit_or() {
+                if precedence >= Precedence::bitwise_or() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::bitwise_or())?;
+                cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
+            if tok.kind().is_bit_xor() {
+                if precedence >= Precedence::bitwise_xor() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::bitwise_xor())?;
+                cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
+            if tok.kind().is_bit_and() {
+                if precedence >= Precedence::bitwise_and() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::bitwise_and())?;
+                cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
             // Unknown token terminates expression.
             self.rewind_position(position);
             break;
