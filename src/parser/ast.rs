@@ -13,7 +13,7 @@ pub enum AstKind {
     IfStatement,
     ExpressionStatement,
 
-    AssignExpression,
+    AssignmentExpression,
     CommaExpression,
     NameExpression
 }
@@ -266,23 +266,23 @@ impl AstNode for ExpressionStatementNode {
 }
 
 /*****************************************************************************
- **** AssignExpressionNode ***************************************************
+ **** AssignmentExpressionNode ***********************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct AssignExpressionNode {
+pub struct AssignmentExpressionNode {
     assignment_op: FullToken,
     left_expr: Box<AstNode>,
     right_expr: Box<AstNode>,
 }
-impl AssignExpressionNode {
+impl AssignmentExpressionNode {
     pub fn new(assignment_op: FullToken, left_expr: Box<AstNode>, right_expr: Box<AstNode>)
-        -> AssignExpressionNode
+        -> AssignmentExpressionNode
     {
         // FIXME: assert that left_expr is a valid lvalue expression.
         assert!(left_expr.is_expression());
         assert!(right_expr.is_expression());
         assert!(assignment_op.kind().is_assignment_op());
-        AssignExpressionNode {
+        AssignmentExpressionNode {
             assignment_op: assignment_op,
             left_expr: left_expr,
             right_expr: right_expr
@@ -299,9 +299,9 @@ impl AssignExpressionNode {
         self.right_expr.as_ref()
     }
 }
-impl AstNode for AssignExpressionNode {
+impl AstNode for AssignmentExpressionNode {
     fn kind(&self) -> AstKind {
-        AstKind::AssignExpression
+        AstKind::AssignmentExpression
     }
     fn is_statement(&self) -> bool {
         false
@@ -310,7 +310,7 @@ impl AstNode for AssignExpressionNode {
         true
     }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
-        w.write_str("AssignExpr(")?;
+        w.write_str("AssignmentExpr(")?;
         self.assignment_op.write_token(w)?;
         w.write_str("){")?;
         self.left_expr.write_tree(w)?;

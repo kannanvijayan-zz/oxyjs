@@ -220,7 +220,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 }
 
                 let right_expr = self.parse_expression(Precedence::assignment())?;
-                cur_expr = Box::new(ast::AssignExpressionNode::new(tok, cur_expr, right_expr));
+                cur_expr = Box::new(ast::AssignmentExpressionNode::new(tok, cur_expr, right_expr));
                 continue;
             }
 
