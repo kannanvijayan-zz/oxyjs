@@ -121,28 +121,28 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             return Ok(Some(Box::new(self.parse_var_statement()?)));
         }
         if tok.kind().is_semicolon() {
-            return Ok(Some(Box::new(ast::EmptyStatementNode::new())));
+            return Ok(Some(Box::new(ast::EmptyStmtNode::new())));
         }
         if tok.kind().is_if_keyword() {
             return Ok(Some(self.parse_if_statement()?));
         }
 
         if let Some(boxed_expr) = self.try_parse_expression(tok, Precedence::lowest())? {
-            return Ok(Some(Box::new(ast::ExpressionStatementNode::new(boxed_expr))));
+            return Ok(Some(Box::new(ast::ExpressionStmtNode::new(boxed_expr))));
         }
 
         self.rewind_position(begin_position);
         Ok(None)
     }
 
-    fn parse_block_statement(&mut self) -> ParseResult<ast::BlockStatementNode> {
+    fn parse_block_statement(&mut self) -> ParseResult<ast::BlockStmtNode> {
         // FIXME: Parse list of statements.
         self.must_expect_token(TokenKind::close_brace())?;
-        Ok(ast::BlockStatementNode::new())
+        Ok(ast::BlockStmtNode::new())
     }
 
-    fn parse_var_statement(&mut self) -> ParseResult<ast::VarStatementNode> {
-        let mut var_statement = ast::VarStatementNode::new();
+    fn parse_var_statement(&mut self) -> ParseResult<ast::VarStmtNode> {
+        let mut var_statement = ast::VarStmtNode::new();
         loop {
             // FIXME: Support initializer expressions.
             // For now, we match only a VarName ("," VarName)* ";"

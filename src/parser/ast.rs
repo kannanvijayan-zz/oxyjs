@@ -7,11 +7,11 @@ use parser::tokenizer::Token;
 #[derive(Debug, Clone, Copy)]
 pub enum AstKind {
     Program,
-    BlockStatement,
-    VarStatement,
-    EmptyStatement,
-    IfStatement,
-    ExpressionStatement,
+    BlockStmt,
+    VarStmt,
+    EmptyStmt,
+    IfStmt,
+    ExpressionStmt,
 
     ConditionalExpression,
     AssignmentExpression,
@@ -85,19 +85,19 @@ impl AstNode for ProgramNode {
 }
 
 /*****************************************************************************
- **** BlockStatementNode *****************************************************
+ **** BlockStmtNode **********************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct BlockStatementNode {
+pub struct BlockStmtNode {
 }
-impl BlockStatementNode {
-    pub fn new() -> BlockStatementNode {
-        BlockStatementNode {}
+impl BlockStmtNode {
+    pub fn new() -> BlockStmtNode {
+        BlockStmtNode {}
     }
 }
-impl AstNode for BlockStatementNode {
+impl AstNode for BlockStmtNode {
     fn kind(&self) -> AstKind {
-        AstKind::BlockStatement
+        AstKind::BlockStmt
     }
     fn is_statement(&self) -> bool {
         true
@@ -111,15 +111,15 @@ impl AstNode for BlockStatementNode {
 }
 
 /*****************************************************************************
- **** VarStatementNode *******************************************************
+ **** VarStmtNode ************************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct VarStatementNode {
+pub struct VarStmtNode {
     variables: Vec<Box<FullToken>>
 }
-impl VarStatementNode {
-    pub fn new() -> VarStatementNode {
-        VarStatementNode {
+impl VarStmtNode {
+    pub fn new() -> VarStmtNode {
+        VarStmtNode {
             variables: Vec::with_capacity(1)
         }
     }
@@ -131,9 +131,9 @@ impl VarStatementNode {
         self.variables.push(Box::new(var));
     }
 }
-impl AstNode for VarStatementNode {
+impl AstNode for VarStmtNode {
     fn kind(&self) -> AstKind {
-        AstKind::VarStatement
+        AstKind::VarStmt
     }
     fn is_statement(&self) -> bool {
         true
@@ -158,19 +158,19 @@ impl AstNode for VarStatementNode {
 }
 
 /*****************************************************************************
- **** EmptyStatementNode *****************************************************
+ **** EmptyStmtNode **********************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct EmptyStatementNode {
+pub struct EmptyStmtNode {
 }
-impl EmptyStatementNode {
-    pub fn new() -> EmptyStatementNode {
-        EmptyStatementNode {}
+impl EmptyStmtNode {
+    pub fn new() -> EmptyStmtNode {
+        EmptyStmtNode {}
     }
 }
-impl AstNode for EmptyStatementNode {
+impl AstNode for EmptyStmtNode {
     fn kind(&self) -> AstKind {
-        AstKind::EmptyStatement
+        AstKind::EmptyStmt
     }
     fn is_statement(&self) -> bool {
         true
@@ -185,18 +185,18 @@ impl AstNode for EmptyStatementNode {
 }
 
 /*****************************************************************************
- **** IfStatementNode ********************************************************
+ **** IfStmtNode *************************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct IfStatementNode {
+pub struct IfStmtNode {
     condition_expression: Box<AstNode>,
     if_statement: Box<AstNode>
 }
-impl IfStatementNode {
+impl IfStmtNode {
     pub fn new_if(condition_expression: Box<AstNode>, if_statement: Box<AstNode>)
-        -> IfStatementNode
+        -> IfStmtNode
     {
-        IfStatementNode {
+        IfStmtNode {
             condition_expression: condition_expression,
             if_statement: if_statement
         }
@@ -209,9 +209,9 @@ impl IfStatementNode {
         self.if_statement.as_ref()
     }
 }
-impl AstNode for IfStatementNode {
+impl AstNode for IfStmtNode {
     fn kind(&self) -> AstKind {
-        AstKind::IfStatement
+        AstKind::IfStmt
     }
     fn is_statement(&self) -> bool {
         true
@@ -231,15 +231,15 @@ impl AstNode for IfStatementNode {
 }
 
 /*****************************************************************************
- **** ExpressionStatementNode ************************************************
+ **** ExpressionStmtNode *****************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct ExpressionStatementNode {
+pub struct ExpressionStmtNode {
     expression: Box<AstNode>
 }
-impl ExpressionStatementNode {
-    pub fn new(expression: Box<AstNode>) -> ExpressionStatementNode {
-        ExpressionStatementNode {
+impl ExpressionStmtNode {
+    pub fn new(expression: Box<AstNode>) -> ExpressionStmtNode {
+        ExpressionStmtNode {
             expression: expression
         }
     }
@@ -248,9 +248,9 @@ impl ExpressionStatementNode {
         self.expression.as_ref()
     }
 }
-impl AstNode for ExpressionStatementNode {
+impl AstNode for ExpressionStmtNode {
     fn kind(&self) -> AstKind {
-        AstKind::ExpressionStatement
+        AstKind::ExpressionStmt
     }
     fn is_statement(&self) -> bool {
         true
@@ -259,7 +259,7 @@ impl AstNode for ExpressionStatementNode {
         false
     }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
-        w.write_str("ExpressionStatement{")?;
+        w.write_str("ExpressionStmt{")?;
         self.expression.write_tree(w)?;
         w.write_str("}")?;
         Ok(())
