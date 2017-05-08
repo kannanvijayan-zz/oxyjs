@@ -46,9 +46,7 @@ pub struct ProgramNode {
 }
 impl ProgramNode {
     pub fn new() -> ProgramNode {
-        ProgramNode {
-            source_elements: Vec::with_capacity(3)
-        }
+        ProgramNode { source_elements: Vec::with_capacity(3) }
     }
 
     pub fn source_elements(&self) -> &Vec<Box<AstNode>> {
@@ -119,9 +117,7 @@ pub struct VarStmtNode {
 }
 impl VarStmtNode {
     pub fn new() -> VarStmtNode {
-        VarStmtNode {
-            variables: Vec::with_capacity(1)
-        }
+        VarStmtNode { variables: Vec::with_capacity(1) }
     }
 
     pub fn variables(&self) -> &Vec<Box<FullToken>> {
@@ -189,24 +185,21 @@ impl AstNode for EmptyStmtNode {
  *****************************************************************************/
 #[derive(Debug)]
 pub struct IfStmtNode {
-    condition_expression: Box<AstNode>,
-    if_statement: Box<AstNode>
+    cond_expr: Box<AstNode>,
+    if_true_stmt: Box<AstNode>
 }
 impl IfStmtNode {
-    pub fn new_if(condition_expression: Box<AstNode>, if_statement: Box<AstNode>)
+    pub fn new_if(cond_expr: Box<AstNode>, if_true_stmt: Box<AstNode>)
         -> IfStmtNode
     {
-        IfStmtNode {
-            condition_expression: condition_expression,
-            if_statement: if_statement
-        }
+        IfStmtNode { cond_expr, if_true_stmt }
     }
 
-    pub fn condition_expression(&self) -> &AstNode {
-        self.condition_expression.as_ref()
+    pub fn cond_expr(&self) -> &AstNode {
+        self.cond_expr.as_ref()
     }
-    pub fn if_statement(&self) -> &AstNode {
-        self.if_statement.as_ref()
+    pub fn if_true_stmt(&self) -> &AstNode {
+        self.if_true_stmt.as_ref()
     }
 }
 impl AstNode for IfStmtNode {
@@ -222,9 +215,9 @@ impl AstNode for IfStmtNode {
 
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("If(")?;
-        self.condition_expression.write_tree(w)?;
+        self.cond_expr.write_tree(w)?;
         w.write_str("){")?;
-        self.if_statement.write_tree(w)?;
+        self.if_true_stmt.write_tree(w)?;
         w.write_str("}")?;
         Ok(())
     }
@@ -235,17 +228,16 @@ impl AstNode for IfStmtNode {
  *****************************************************************************/
 #[derive(Debug)]
 pub struct ExprStmtNode {
-    expression: Box<AstNode>
+    expr: Box<AstNode>
 }
 impl ExprStmtNode {
-    pub fn new(expression: Box<AstNode>) -> ExprStmtNode {
-        ExprStmtNode {
-            expression: expression
-        }
+    pub fn new(expr: Box<AstNode>) -> ExprStmtNode {
+        assert!(expr.is_expression());
+        ExprStmtNode { expr }
     }
 
     pub fn expression(&self) -> &AstNode {
-        self.expression.as_ref()
+        self.expr.as_ref()
     }
 }
 impl AstNode for ExprStmtNode {
@@ -260,7 +252,7 @@ impl AstNode for ExprStmtNode {
     }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("ExprStmt{")?;
-        self.expression.write_tree(w)?;
+        self.expr.write_tree(w)?;
         w.write_str("}")?;
         Ok(())
     }
@@ -282,11 +274,7 @@ impl CondExprNode {
         assert!(cond_expr.is_expression());
         assert!(if_expr.is_expression());
         assert!(else_expr.is_expression());
-        CondExprNode {
-            cond_expr: cond_expr,
-            if_expr: if_expr,
-            else_expr: else_expr
-        }
+        CondExprNode { cond_expr, if_expr, else_expr }
     }
 
     pub fn cond_expr(&self) -> &AstNode {
@@ -326,27 +314,23 @@ impl AstNode for CondExprNode {
  *****************************************************************************/
 #[derive(Debug)]
 pub struct AssignExprNode {
-    assignment_op: FullToken,
+    assign_op: FullToken,
     left_expr: Box<AstNode>,
     right_expr: Box<AstNode>
 }
 impl AssignExprNode {
-    pub fn new(assignment_op: FullToken, left_expr: Box<AstNode>, right_expr: Box<AstNode>)
+    pub fn new(assign_op: FullToken, left_expr: Box<AstNode>, right_expr: Box<AstNode>)
         -> AssignExprNode
     {
         // FIXME: assert that left_expr is a valid lvalue expression.
         assert!(left_expr.is_expression());
         assert!(right_expr.is_expression());
-        assert!(assignment_op.kind().is_assignment_op());
-        AssignExprNode {
-            assignment_op: assignment_op,
-            left_expr: left_expr,
-            right_expr: right_expr
-        }
+        assert!(assign_op.kind().is_assignment_op());
+        AssignExprNode { assign_op, left_expr, right_expr }
     }
 
     pub fn assignment_op(&self) -> &FullToken {
-        &self.assignment_op
+        &self.assign_op
     }
     pub fn left_expr(&self) -> &AstNode {
         self.left_expr.as_ref()
@@ -367,7 +351,7 @@ impl AstNode for AssignExprNode {
     }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("AssignExpr(")?;
-        self.assignment_op.write_token(w)?;
+        self.assign_op.write_token(w)?;
         w.write_str("){")?;
         self.left_expr.write_tree(w)?;
         w.write_str(", ")?;
@@ -389,10 +373,7 @@ impl CommaExprNode {
     pub fn new(left_expr: Box<AstNode>, right_expr: Box<AstNode>) -> CommaExprNode {
         assert!(left_expr.is_expression());
         assert!(right_expr.is_expression());
-        CommaExprNode {
-            left_expr: left_expr,
-            right_expr: right_expr
-        }
+        CommaExprNode { left_expr, right_expr }
     }
 
     pub fn left_expr(&self) -> &AstNode {
@@ -432,9 +413,7 @@ pub struct NameExprNode {
 impl NameExprNode {
     pub fn new(name: FullToken) -> NameExprNode {
         assert!(name.kind().is_identifier());
-        NameExprNode {
-            name: name
-        }
+        NameExprNode { name }
     }
 
     pub fn name(&self) -> &FullToken {
