@@ -403,7 +403,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             if ch1.is_char('=') {
                 return self.emit_token(TokenKind::bit_or_assign());
             }
-            if ch1.is_char('&') {
+            if ch1.is_char('|') {
                 return self.emit_token(TokenKind::logical_or());
             }
             self.unread_ascii_char(ch1);
