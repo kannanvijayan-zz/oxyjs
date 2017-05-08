@@ -234,6 +234,28 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 continue;
             }
 
+            if tok.kind().is_logical_or() {
+                if precedence >= Precedence::logical_or() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::logical_or())?;
+                cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
+            if tok.kind().is_logical_and() {
+                if precedence >= Precedence::logical_and() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::logical_and())?;
+                cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
             // Unknown token terminates expression.
             self.rewind_position(position);
             break;

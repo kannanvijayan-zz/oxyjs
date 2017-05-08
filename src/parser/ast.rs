@@ -13,6 +13,7 @@ pub enum AstKind {
     IfStmt,
     ExprStmt,
 
+    BinaryOpExpr,
     CondExpr,
     AssignExpr,
     CommaExpr,
@@ -253,6 +254,56 @@ impl AstNode for ExprStmtNode {
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("ExprStmt{")?;
         self.expr.write_tree(w)?;
+        w.write_str("}")?;
+        Ok(())
+    }
+}
+
+/*****************************************************************************
+ **** BinaryExprNode *********************************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct BinaryOpExprNode {
+    binary_op: FullToken,
+    left_expr: Box<AstNode>,
+    right_expr: Box<AstNode>
+}
+impl BinaryOpExprNode {
+    pub fn new(binary_op: FullToken, left_expr: Box<AstNode>, right_expr: Box<AstNode>)
+        -> BinaryOpExprNode
+    {
+        assert!(left_expr.is_expression());
+        assert!(right_expr.is_expression());
+        BinaryOpExprNode { binary_op, left_expr, right_expr }
+    }
+
+    pub fn binary_op(&self) -> &FullToken {
+        &self.binary_op
+    }
+    pub fn left_expr(&self) -> &AstNode {
+        self.left_expr.as_ref()
+    }
+    pub fn right_expr(&self) -> &AstNode {
+        self.right_expr.as_ref()
+    }
+}
+impl AstNode for BinaryOpExprNode {
+    fn kind(&self) -> AstKind {
+        AstKind::BinaryOpExpr
+    }
+    fn is_statement(&self) -> bool {
+        false
+    }
+    fn is_expression(&self) -> bool {
+        true
+    }
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("BinaryOpExpr(")?;
+        self.binary_op.write_token(w)?;
+        w.write_str("){")?;
+        self.left_expr.write_tree(w)?;
+        w.write_str(", ")?;
+        self.right_expr.write_tree(w)?;
         w.write_str("}")?;
         Ok(())
     }
