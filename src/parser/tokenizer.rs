@@ -1,9 +1,22 @@
 
 use std::fmt;
+use std::ptr;
 use parser::char_utils::AsciiChar;
 use parser::input_stream::{InputStream, StreamPosition};
 use parser::token_kind::TokenKind;
 
+/**
+ * Initializer for tokenizer module that must be called exactly once at the
+ * beginning of program execution.
+ */
+static mut MODULE_INITIALIZED: bool = false;
+pub fn initialize_module() {
+    unsafe {
+        assert!(!MODULE_INITIALIZED);
+        init_single_char_tokens();
+        MODULE_INITIALIZED = true;
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum TokenError {
@@ -881,33 +894,31 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
 }
 
 fn check_single_char_token(ch: AsciiChar) -> TokenKind {
-    * unsafe { SINGLE_CHAR_TOKENS.get_unchecked(ch.octet_value_or_0xff() as usize) }
+    unsafe {
+        *(&SINGLE_CHAR_TOKENS as &[TokenKind]).get_unchecked(ch.octet_value_or_0xff() as usize)
+    }
 }
-lazy_static! {
-    static ref SINGLE_CHAR_TOKENS: Vec<TokenKind> = {
-        let mut vec = Vec::with_capacity(256);
-        for i in 0..255 {
-            vec.push(TokenKind::error());
-        }
 
-        {
-            let mut update_vec = |ch, kind| {
-                assert!((ch as usize) <= 256);
-                vec[ch as usize] = kind;
-            };
-            update_vec('(', TokenKind::open_paren());
-            update_vec(')', TokenKind::close_paren());
-            update_vec('[', TokenKind::open_bracket());
-            update_vec(']', TokenKind::close_bracket());
-            update_vec('{', TokenKind::open_brace());
-            update_vec('}', TokenKind::close_brace());
-            update_vec('.', TokenKind::dot());
-            update_vec(';', TokenKind::semicolon());
-            update_vec(',', TokenKind::comma());
-            update_vec('?', TokenKind::question());
-            update_vec(':', TokenKind::colon());
-            update_vec('~', TokenKind::tilde());
-        }
-        vec
+static mut SINGLE_CHAR_TOKENS: [TokenKind; 256] = [TokenKind(0); 256];
+unsafe fn init_single_char_tokens() {
+    for i in 0..255 {
+        SINGLE_CHAR_TOKENS[i] = TokenKind::error();
+    }
+
+    let update_array = |ch, kind| {
+        assert!((ch as usize) <= 256);
+        SINGLE_CHAR_TOKENS[ch as usize] = kind;
     };
+    update_array('(', TokenKind::open_paren());
+    update_array(')', TokenKind::close_paren());
+    update_array('[', TokenKind::open_bracket());
+    update_array(']', TokenKind::close_bracket());
+    update_array('{', TokenKind::open_brace());
+    update_array('}', TokenKind::close_brace());
+    update_array('.', TokenKind::dot());
+    update_array(';', TokenKind::semicolon());
+    update_array(',', TokenKind::comma());
+    update_array('?', TokenKind::question());
+    update_array(':', TokenKind::colon());
+    update_array('~', TokenKind::tilde());
 }

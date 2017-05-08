@@ -3,7 +3,7 @@
 
 /** The enum of all token kinds. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TokenKind(u8);
+pub struct TokenKind(pub u8);
 impl TokenKind {
     pub fn name(&self) -> &'static str {
         TOKEN_STRINGS[self.0 as usize]

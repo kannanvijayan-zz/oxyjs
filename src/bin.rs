@@ -11,6 +11,8 @@ use std::fs::File;
 use std::path::Path;
 
 fn main() {
+    liboxyjs::initialize_library();
+
     let mut stdin = io::stdin();
     let mut buf: Vec<u8> = Vec::new();
     stdin.read_to_end(&mut buf).unwrap();

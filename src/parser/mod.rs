@@ -7,3 +7,11 @@ pub mod precedence;
 pub mod tokenizer;
 pub mod token_kind;
 
+/**
+ * Initializer for parser module that must be called exactly once at the
+ * beginning of program execution.
+ */
+pub fn initialize_module() {
+    tokenizer::initialize_module()
+}
+
