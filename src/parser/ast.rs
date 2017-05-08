@@ -11,7 +11,7 @@ pub enum AstKind {
     VarStmt,
     EmptyStmt,
     IfStmt,
-    ExpressionStmt,
+    ExprStmt,
 
     ConditionalExpression,
     AssignmentExpression,
@@ -231,15 +231,15 @@ impl AstNode for IfStmtNode {
 }
 
 /*****************************************************************************
- **** ExpressionStmtNode *****************************************************
+ **** ExprStmtNode ***********************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct ExpressionStmtNode {
+pub struct ExprStmtNode {
     expression: Box<AstNode>
 }
-impl ExpressionStmtNode {
-    pub fn new(expression: Box<AstNode>) -> ExpressionStmtNode {
-        ExpressionStmtNode {
+impl ExprStmtNode {
+    pub fn new(expression: Box<AstNode>) -> ExprStmtNode {
+        ExprStmtNode {
             expression: expression
         }
     }
@@ -248,9 +248,9 @@ impl ExpressionStmtNode {
         self.expression.as_ref()
     }
 }
-impl AstNode for ExpressionStmtNode {
+impl AstNode for ExprStmtNode {
     fn kind(&self) -> AstKind {
-        AstKind::ExpressionStmt
+        AstKind::ExprStmt
     }
     fn is_statement(&self) -> bool {
         true
@@ -259,7 +259,7 @@ impl AstNode for ExpressionStmtNode {
         false
     }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
-        w.write_str("ExpressionStmt{")?;
+        w.write_str("ExprStmt{")?;
         self.expression.write_tree(w)?;
         w.write_str("}")?;
         Ok(())

@@ -128,7 +128,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         }
 
         if let Some(boxed_expr) = self.try_parse_expression(tok, Precedence::lowest())? {
-            return Ok(Some(Box::new(ast::ExpressionStmtNode::new(boxed_expr))));
+            return Ok(Some(Box::new(ast::ExprStmtNode::new(boxed_expr))));
         }
 
         self.rewind_position(begin_position);
