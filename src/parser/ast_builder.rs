@@ -170,10 +170,8 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> ParseResult<Box<AstNode>> {
-        println!("BEGIN (parse_expression)");
         let token = self.next_token()?;
         if let Some(boxed_expr) = self.try_parse_expression(token, precedence)? {
-            println!("END (parse_expression)");
             return Ok(boxed_expr);
         }
 
@@ -199,15 +197,30 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         loop {
             let position = self.mark_position();
             let tok = self.next_token()?;
-            if tok.kind.is_comma() {
+            if tok.kind().is_comma() {
                 if precedence >= Precedence::comma() {
                     self.rewind_position(position);
                     return Ok(cur_expr);
                 }
 
-                // Accumulate any commas.
                 let right_expr = self.parse_expression(Precedence::comma())?;
                 cur_expr = Box::new(ast::CommaExpressionNode::new(cur_expr, right_expr));
+                continue;
+            }
+
+            if tok.kind().is_assignment_op() {
+                // FIXME: Check that cur_expr is a valid lvalue expression.
+                // Return syntax error if not.
+
+                // Assignment associates right-to-left, so we use '>' for precedence
+                // instead of '>='.
+                if precedence > Precedence::assignment() {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                let right_expr = self.parse_expression(Precedence::assignment())?;
+                cur_expr = Box::new(ast::AssignExpressionNode::new(tok, cur_expr, right_expr));
                 continue;
             }
 

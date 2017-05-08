@@ -2,7 +2,7 @@
 // TODO: Use macros to make this file not suck so much.
 
 /** The enum of all token kinds. */
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TokenKind(u8);
 impl TokenKind {
     pub fn name(&self) -> &'static str {
@@ -422,6 +422,9 @@ impl TokenKind {
         self.0 == TOK_BIT_XOR_ASSIGN.0
     }
 
+    pub fn is_assignment_op(&self) -> bool {
+        (self.0 >= MIN_ASSIGN_TOK_ID) && (self.0 <= MAX_ASSIGN_TOK_ID)
+    }
 
     pub fn break_keyword() -> TokenKind {
         TokenKind(TOK_BREAK_KEYWORD.0)
@@ -667,7 +670,10 @@ const TOK_BIT_AND_ASSIGN: (u8, &'static str) = (TOK_ARITHMETIC_SHIFT_RIGHT_ASSIG
 const TOK_BIT_OR_ASSIGN: (u8, &'static str) = (TOK_BIT_AND_ASSIGN.0 + 1, "bit_or_assign");
 const TOK_BIT_XOR_ASSIGN: (u8, &'static str) = (TOK_BIT_OR_ASSIGN.0 + 1, "bit_xor_assign");
 
-    // Keywords
+const MIN_ASSIGN_TOK_ID: u8 = TOK_ASSIGN.0;
+const MAX_ASSIGN_TOK_ID: u8 = TOK_BIT_XOR_ASSIGN.0;
+
+// Keywords
 const TOK_BREAK_KEYWORD: (u8, &'static str) = (TOK_BIT_XOR_ASSIGN.0 + 1, "break_keyword");
 const TOK_CASE_KEYWORD: (u8, &'static str) = (TOK_BREAK_KEYWORD.0 + 1, "case_keyword");
 const TOK_CATCH_KEYWORD: (u8, &'static str) = (TOK_CASE_KEYWORD.0 + 1, "catch_keyword");

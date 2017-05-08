@@ -13,6 +13,7 @@ pub enum AstKind {
     IfStatement,
     ExpressionStatement,
 
+    AssignExpression,
     CommaExpression,
     NameExpression
 }
@@ -259,6 +260,62 @@ impl AstNode for ExpressionStatementNode {
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("ExpressionStatement{")?;
         self.expression.write_tree(w)?;
+        w.write_str("}")?;
+        Ok(())
+    }
+}
+
+/*****************************************************************************
+ **** AssignExpressionNode ***************************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct AssignExpressionNode {
+    assignment_op: FullToken,
+    left_expr: Box<AstNode>,
+    right_expr: Box<AstNode>,
+}
+impl AssignExpressionNode {
+    pub fn new(assignment_op: FullToken, left_expr: Box<AstNode>, right_expr: Box<AstNode>)
+        -> AssignExpressionNode
+    {
+        // FIXME: assert that left_expr is a valid lvalue expression.
+        assert!(left_expr.is_expression());
+        assert!(right_expr.is_expression());
+        assert!(assignment_op.kind().is_assignment_op());
+        AssignExpressionNode {
+            assignment_op: assignment_op,
+            left_expr: left_expr,
+            right_expr: right_expr
+        }
+    }
+
+    pub fn assignment_op(&self) -> &FullToken {
+        &self.assignment_op
+    }
+    pub fn left_expr(&self) -> &AstNode {
+        self.left_expr.as_ref()
+    }
+    pub fn right_expr(&self) -> &AstNode {
+        self.right_expr.as_ref()
+    }
+}
+impl AstNode for AssignExpressionNode {
+    fn kind(&self) -> AstKind {
+        AstKind::AssignExpression
+    }
+    fn is_statement(&self) -> bool {
+        false
+    }
+    fn is_expression(&self) -> bool {
+        true
+    }
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("AssignExpr(")?;
+        self.assignment_op.write_token(w)?;
+        w.write_str("){")?;
+        self.left_expr.write_tree(w)?;
+        w.write_str(", ")?;
+        self.right_expr.write_tree(w)?;
         w.write_str("}")?;
         Ok(())
     }
