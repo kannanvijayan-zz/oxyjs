@@ -12,4 +12,3 @@ name = "oxyjs"
 path = "src/bin.rs"
 
 [dependencies]
-lazy_static = "0.2.8"

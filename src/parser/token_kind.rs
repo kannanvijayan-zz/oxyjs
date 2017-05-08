@@ -1,12 +1,24 @@
 
 // TODO: Use macros to make this file not suck so much.
 
+static mut MODULE_INITIALIZED: bool = false;
+pub fn initialize_module() {
+    unsafe {
+        assert!(!MODULE_INITIALIZED);
+        init_tok_strings();
+        MODULE_INITIALIZED = true;
+    }
+}
+
 /** The enum of all token kinds. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TokenKind(pub u8);
 impl TokenKind {
     pub fn name(&self) -> &'static str {
-        TOKEN_STRINGS[self.0 as usize]
+        unsafe {
+            assert!(MODULE_INITIALIZED);
+            TOKEN_STRINGS[self.0 as usize]
+        }
     }
 
     pub fn error() -> TokenKind {
@@ -704,109 +716,100 @@ const MAX_KEYWORD_TOK_ID: u8 = TOK_WHILE_KEYWORD.0;
 
 const MAX_TOK_ID: u8 = TOK_WHILE_KEYWORD.0;
 
-lazy_static! {
-    static ref TOKEN_STRINGS: Vec<&'static str> = {
-        let mut vec = Vec::with_capacity(MAX_TOK_ID as usize + 1);
-        for i in 0..(MAX_TOK_ID+1) {
-            vec.push("");
-        }
-
-        {
-            let mut update_vec = |tok_info: &(u8, &'static str)| {
-                vec[tok_info.0 as usize] = tok_info.1;
-            };
-
-            update_vec(&TOK_ERROR);
-            update_vec(&TOK_END);
-
-            update_vec(&TOK_WHITESPACE);
-            update_vec(&TOK_NEWLINE);
-            update_vec(&TOK_COMMENT);
-
-            update_vec(&TOK_IDENTIFIER);
-            update_vec(&TOK_INTEGER_LITERAL);
-            update_vec(&TOK_HEX_INTEGER_LITERAL);
-            update_vec(&TOK_OCT_INTEGER_LITERAL);
-            update_vec(&TOK_FLOAT_LITERAL);
-
-            update_vec(&TOK_OPEN_PAREN);
-            update_vec(&TOK_CLOSE_PAREN);
-            update_vec(&TOK_OPEN_BRACKET);
-            update_vec(&TOK_CLOSE_BRACKET);
-            update_vec(&TOK_OPEN_BRACE);
-            update_vec(&TOK_CLOSE_BRACE);
-
-            update_vec(&TOK_DOT);
-            update_vec(&TOK_SEMICOLON);
-            update_vec(&TOK_COMMA);
-            update_vec(&TOK_QUESTION);
-            update_vec(&TOK_COLON);
-
-            update_vec(&TOK_EQUAL);
-            update_vec(&TOK_STRICT_EQUAL);
-            update_vec(&TOK_NOT_EQUAL);
-            update_vec(&TOK_STRICT_NOT_EQUAL);
-            update_vec(&TOK_LESS);
-            update_vec(&TOK_LESS_EQUAL);
-            update_vec(&TOK_GREATER);
-            update_vec(&TOK_GREATER_EQUAL);
-
-            update_vec(&TOK_TILDE);
-            update_vec(&TOK_BANG);
-            update_vec(&TOK_PLUS);
-            update_vec(&TOK_PLUS_PLUS);
-            update_vec(&TOK_MINUS);
-            update_vec(&TOK_MINUS_MINUS);
-            update_vec(&TOK_STAR);
-            update_vec(&TOK_SLASH);
-            update_vec(&TOK_PERCENT);
-            update_vec(&TOK_SHIFT_LEFT);
-            update_vec(&TOK_SHIFT_RIGHT);
-            update_vec(&TOK_ARITHMETIC_SHIFT_RIGHT);
-            update_vec(&TOK_BIT_AND);
-            update_vec(&TOK_BIT_OR);
-            update_vec(&TOK_BIT_XOR);
-            update_vec(&TOK_LOGICAL_AND);
-            update_vec(&TOK_LOGICAL_OR);
-
-            update_vec(&TOK_ASSIGN);
-            update_vec(&TOK_PLUS_ASSIGN);
-            update_vec(&TOK_MINUS_ASSIGN);
-            update_vec(&TOK_STAR_ASSIGN);
-            update_vec(&TOK_SLASH_ASSIGN);
-            update_vec(&TOK_PERCENT_ASSIGN);
-            update_vec(&TOK_SHIFT_LEFT_ASSIGN);
-            update_vec(&TOK_SHIFT_RIGHT_ASSIGN);
-            update_vec(&TOK_ARITHMETIC_SHIFT_RIGHT_ASSIGN);
-            update_vec(&TOK_BIT_AND_ASSIGN);
-            update_vec(&TOK_BIT_OR_ASSIGN);
-            update_vec(&TOK_BIT_XOR_ASSIGN);
-
-            update_vec(&TOK_BREAK_KEYWORD);
-            update_vec(&TOK_CASE_KEYWORD);
-            update_vec(&TOK_CATCH_KEYWORD);
-            update_vec(&TOK_CONTINUE_KEYWORD);
-            update_vec(&TOK_DEFAULT_KEYWORD);
-            update_vec(&TOK_DELETE_KEYWORD);
-            update_vec(&TOK_DO_KEYWORD);
-            update_vec(&TOK_ELSE_KEYWORD);
-            update_vec(&TOK_FINALLY_KEYWORD);
-            update_vec(&TOK_FOR_KEYWORD);
-            update_vec(&TOK_FUNCTION_KEYWORD);
-            update_vec(&TOK_IF_KEYWORD);
-            update_vec(&TOK_IN_KEYWORD);
-            update_vec(&TOK_INSTANCEOF_KEYWORD);
-            update_vec(&TOK_NEW_KEYWORD);
-            update_vec(&TOK_RETURN_KEYWORD);
-            update_vec(&TOK_SWITCH_KEYWORD);
-            update_vec(&TOK_THIS_KEYWORD);
-            update_vec(&TOK_THROW_KEYWORD);
-            update_vec(&TOK_TRY_KEYWORD);
-            update_vec(&TOK_TYPEOF_KEYWORD);
-            update_vec(&TOK_VAR_KEYWORD);
-            update_vec(&TOK_VOID_KEYWORD);
-            update_vec(&TOK_WHILE_KEYWORD);
-        }
-        vec
+static mut TOKEN_STRINGS: [&'static str; MAX_TOK_ID as usize + 1] = [""; MAX_TOK_ID as usize  + 1];
+unsafe fn init_tok_strings() {
+    let update_array = |tok_info: &(u8, &'static str)| {
+        assert!(tok_info.0 <= MAX_TOK_ID);
+        TOKEN_STRINGS[tok_info.0 as usize] = tok_info.1;
     };
+    update_array(&TOK_ERROR);
+    update_array(&TOK_END);
+
+    update_array(&TOK_WHITESPACE);
+    update_array(&TOK_NEWLINE);
+    update_array(&TOK_COMMENT);
+
+    update_array(&TOK_IDENTIFIER);
+    update_array(&TOK_INTEGER_LITERAL);
+    update_array(&TOK_HEX_INTEGER_LITERAL);
+    update_array(&TOK_OCT_INTEGER_LITERAL);
+    update_array(&TOK_FLOAT_LITERAL);
+
+    update_array(&TOK_OPEN_PAREN);
+    update_array(&TOK_CLOSE_PAREN);
+    update_array(&TOK_OPEN_BRACKET);
+    update_array(&TOK_CLOSE_BRACKET);
+    update_array(&TOK_OPEN_BRACE);
+    update_array(&TOK_CLOSE_BRACE);
+
+    update_array(&TOK_DOT);
+    update_array(&TOK_SEMICOLON);
+    update_array(&TOK_COMMA);
+    update_array(&TOK_QUESTION);
+    update_array(&TOK_COLON);
+
+    update_array(&TOK_EQUAL);
+    update_array(&TOK_STRICT_EQUAL);
+    update_array(&TOK_NOT_EQUAL);
+    update_array(&TOK_STRICT_NOT_EQUAL);
+    update_array(&TOK_LESS);
+    update_array(&TOK_LESS_EQUAL);
+    update_array(&TOK_GREATER);
+    update_array(&TOK_GREATER_EQUAL);
+
+    update_array(&TOK_TILDE);
+    update_array(&TOK_BANG);
+    update_array(&TOK_PLUS);
+    update_array(&TOK_PLUS_PLUS);
+    update_array(&TOK_MINUS);
+    update_array(&TOK_MINUS_MINUS);
+    update_array(&TOK_STAR);
+    update_array(&TOK_SLASH);
+    update_array(&TOK_PERCENT);
+    update_array(&TOK_SHIFT_LEFT);
+    update_array(&TOK_SHIFT_RIGHT);
+    update_array(&TOK_ARITHMETIC_SHIFT_RIGHT);
+    update_array(&TOK_BIT_AND);
+    update_array(&TOK_BIT_OR);
+    update_array(&TOK_BIT_XOR);
+    update_array(&TOK_LOGICAL_AND);
+    update_array(&TOK_LOGICAL_OR);
+
+    update_array(&TOK_ASSIGN);
+    update_array(&TOK_PLUS_ASSIGN);
+    update_array(&TOK_MINUS_ASSIGN);
+    update_array(&TOK_STAR_ASSIGN);
+    update_array(&TOK_SLASH_ASSIGN);
+    update_array(&TOK_PERCENT_ASSIGN);
+    update_array(&TOK_SHIFT_LEFT_ASSIGN);
+    update_array(&TOK_SHIFT_RIGHT_ASSIGN);
+    update_array(&TOK_ARITHMETIC_SHIFT_RIGHT_ASSIGN);
+    update_array(&TOK_BIT_AND_ASSIGN);
+    update_array(&TOK_BIT_OR_ASSIGN);
+    update_array(&TOK_BIT_XOR_ASSIGN);
+
+    update_array(&TOK_BREAK_KEYWORD);
+    update_array(&TOK_CASE_KEYWORD);
+    update_array(&TOK_CATCH_KEYWORD);
+    update_array(&TOK_CONTINUE_KEYWORD);
+    update_array(&TOK_DEFAULT_KEYWORD);
+    update_array(&TOK_DELETE_KEYWORD);
+    update_array(&TOK_DO_KEYWORD);
+    update_array(&TOK_ELSE_KEYWORD);
+    update_array(&TOK_FINALLY_KEYWORD);
+    update_array(&TOK_FOR_KEYWORD);
+    update_array(&TOK_FUNCTION_KEYWORD);
+    update_array(&TOK_IF_KEYWORD);
+    update_array(&TOK_IN_KEYWORD);
+    update_array(&TOK_INSTANCEOF_KEYWORD);
+    update_array(&TOK_NEW_KEYWORD);
+    update_array(&TOK_RETURN_KEYWORD);
+    update_array(&TOK_SWITCH_KEYWORD);
+    update_array(&TOK_THIS_KEYWORD);
+    update_array(&TOK_THROW_KEYWORD);
+    update_array(&TOK_TRY_KEYWORD);
+    update_array(&TOK_TYPEOF_KEYWORD);
+    update_array(&TOK_VAR_KEYWORD);
+    update_array(&TOK_VOID_KEYWORD);
+    update_array(&TOK_WHILE_KEYWORD);
 }

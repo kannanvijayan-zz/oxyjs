@@ -12,6 +12,7 @@ pub mod token_kind;
  * beginning of program execution.
  */
 pub fn initialize_module() {
-    tokenizer::initialize_module()
+    token_kind::initialize_module();
+    tokenizer::initialize_module();
 }
 
