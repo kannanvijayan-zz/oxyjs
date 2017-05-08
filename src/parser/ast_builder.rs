@@ -63,12 +63,14 @@ pub type ParseResult<T> = Result<T, ParseError>;
 pub type MaybeParseResult<T> = ParseResult<Option<T>>;
 
 pub struct AstBuilder<STREAM: InputStream> {
-    tokenizer: Tokenizer<STREAM, FullTokenizerMode>
+    tokenizer: Tokenizer<STREAM, FullTokenizerMode>,
+    skipped_newline: bool
 }
 impl<STREAM: InputStream> AstBuilder<STREAM> {
     pub fn new(stream: STREAM) -> AstBuilder<STREAM> {
         AstBuilder {
-            tokenizer: Tokenizer::new(stream, FullTokenizerMode{})
+            tokenizer: Tokenizer::new(stream, FullTokenizerMode{}),
+            skipped_newline: false
         }
     }
 
@@ -402,6 +404,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     }
 
     fn next_token_impl(&mut self, check_kw: bool, want_newlines: bool) -> ParseResult<FullToken> {
+        self.skipped_newline = false;
         loop {
             let token = self.tokenizer.next_token(/* check_kw = */ true);
             let kind = token.kind();
@@ -410,6 +413,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 continue;
             }
             if !want_newlines && kind.is_newline() {
+                self.skipped_newline = true;
                 continue;
             }
             if kind.is_error() {
