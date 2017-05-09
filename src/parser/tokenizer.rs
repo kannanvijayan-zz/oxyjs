@@ -134,6 +134,11 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         self.read_token(check_kw)
     }
 
+    pub fn push_back_token(&mut self, token: MODE::Tok) {
+        assert!(self.pushed_back_token.is_none());
+        self.pushed_back_token = Some(token);
+    }
+
     pub fn mark_position(&self) -> TokenizerPosition {
         assert!(self.token_error.is_none());
         if let Some(ref tok) = self.pushed_back_token {
