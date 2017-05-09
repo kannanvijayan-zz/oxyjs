@@ -228,13 +228,26 @@ impl AstNode for EmptyStmtNode {
 #[derive(Debug)]
 pub struct IfStmtNode {
     cond_expr: Box<AstNode>,
-    if_true_stmt: Box<AstNode>
+    if_true_stmt: Box<AstNode>,
+    if_false_stmt: Option<Box<AstNode>>
 }
 impl IfStmtNode {
     pub fn new_if(cond_expr: Box<AstNode>, if_true_stmt: Box<AstNode>)
         -> IfStmtNode
     {
-        IfStmtNode { cond_expr, if_true_stmt }
+        assert!(cond_expr.is_expression());
+        assert!(if_true_stmt.is_statement());
+        IfStmtNode { cond_expr, if_true_stmt, if_false_stmt: None }
+    }
+    pub fn new_if_else(cond_expr: Box<AstNode>,
+                       if_true_stmt: Box<AstNode>,
+                       if_false_stmt: Box<AstNode>)
+        -> IfStmtNode
+    {
+        assert!(cond_expr.is_expression());
+        assert!(if_true_stmt.is_statement());
+        assert!(if_false_stmt.is_statement());
+        IfStmtNode { cond_expr, if_true_stmt, if_false_stmt: Some(if_false_stmt) }
     }
 
     pub fn cond_expr(&self) -> &AstNode {
@@ -242,6 +255,16 @@ impl IfStmtNode {
     }
     pub fn if_true_stmt(&self) -> &AstNode {
         self.if_true_stmt.as_ref()
+    }
+    pub fn has_if_false_stmt(&self) -> bool {
+        self.if_false_stmt.is_some()
+    }
+    pub fn if_false_stmt(&self) -> Option<&AstNode> {
+        if let Some(ref boxed_stmt) = self.if_false_stmt {
+            Some(boxed_stmt.as_ref())
+        } else {
+            None
+        }
     }
 }
 impl AstNode for IfStmtNode {
@@ -261,6 +284,11 @@ impl AstNode for IfStmtNode {
         w.write_str("){")?;
         self.if_true_stmt.write_tree(w)?;
         w.write_str("}")?;
+        if let Some(ref boxed_stmt) = self.if_false_stmt {
+            w.write_str("Else{")?;
+            boxed_stmt.write_tree(w)?;
+            w.write_str("}")?;
+        }
         Ok(())
     }
 }

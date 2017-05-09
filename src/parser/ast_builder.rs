@@ -57,7 +57,8 @@ pub enum ParseError {
     UnexpectedToken{expected:TokenKind, got:TokenKind},
     ExpectedVariableName,
     ExpectedCommaOrSemicolon,
-    ExpectedExpression
+    ExpectedExpression,
+    ExpectedStatement
 }
 pub type ParseResult<T> = Result<T, ParseError>;
 pub type MaybeParseResult<T> = ParseResult<Option<T>>;
@@ -105,6 +106,14 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         self.must_expect_token(TokenKind::end())?;
 
         Ok(Box::new(program_node))
+    }
+
+    fn parse_statement(&mut self) -> ParseResult<Box<AstNode>> {
+        if let Some(boxed_stmt) = self.try_parse_statement()? {
+            Ok(boxed_stmt)
+        } else {
+            Err(ParseError::ExpectedStatement)
+        }
     }
 
     fn try_parse_statement(&mut self) -> MaybeParseResult<Box<AstNode>> {
@@ -179,8 +188,19 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     }
 
     fn parse_if_statement(&mut self) -> ParseResult<Box<AstNode>> {
-        // FIXME: implement this after expression parsing is supported.
-        panic!("parse_if_statement is not implemented.")
+        // "if" must be followed by "(".
+        self.must_expect_token(TokenKind::open_paren())?;
+        let cond_expr = self.parse_expression(Precedence::lowest())?;
+        self.must_expect_token(TokenKind::close_paren())?;
+        let if_true_stmt = self.parse_statement()?;
+
+        // Check for 'else'
+        if self.expect_token(TokenKind::else_keyword())? {
+            let if_false_stmt = self.parse_statement()?;
+            Ok(Box::new(ast::IfStmtNode::new_if_else(cond_expr, if_true_stmt, if_false_stmt)))
+        } else {
+            Ok(Box::new(ast::IfStmtNode::new_if(cond_expr, if_true_stmt)))
+        }
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> ParseResult<Box<AstNode>> {
