@@ -129,14 +129,19 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     pub fn next_token(&mut self, check_kw: bool) -> MODE::Tok {
         assert!(self.token_error.is_none());
         if let Some(tok) = self.pushed_back_token.take() {
+            // If check_kw=true, and tok is an identifier, then the token
+            // might really have been a keyword that was parsed an identifier
+            // due to check_kw=false.  Reparse.
+            // If check_kw=false, and tok is a keyword, then reparse.
+            if (check_kw && tok.kind().is_identifier()) ||
+                (!check_kw && tok.kind().is_keyword()) {
+                self.input_stream.rewind(tok.start_offset());
+                return self.read_token(check_kw);
+            }
+
             return tok;
         }
         self.read_token(check_kw)
-    }
-
-    pub fn push_back_token(&mut self, token: MODE::Tok) {
-        assert!(self.pushed_back_token.is_none());
-        self.pushed_back_token = Some(token);
     }
 
     pub fn mark_position(&self) -> TokenizerPosition {
