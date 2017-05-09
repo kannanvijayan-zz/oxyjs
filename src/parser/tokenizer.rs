@@ -91,7 +91,7 @@ pub trait TokenizerMode {
  * the token stream we can rewind to.
  */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TokenizerPosition(usize);
+pub struct TokenizerPosition(StreamPosition);
 
 /**
  * The actual tokenizer is parameterized on the input stream type and the
@@ -105,11 +105,7 @@ pub struct Tokenizer<STREAM: InputStream, MODE: TokenizerMode> {
     tokenizer_mode: MODE,
     token_start_position: StreamPosition,
     token_error: Option<TokenError>,
-
-    buffer_start_position: StreamPosition,
-    token_buffer: Vec<(MODE::Tok, bool)>,
-    token_buffer_start_index: usize,
-    token_buffer_reverse_index: usize,
+    pushed_back_token: Option<MODE::Tok>
 }
 impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     where STREAM: InputStream,
@@ -121,10 +117,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             tokenizer_mode: tokenizer_mode,
             token_start_position: StreamPosition::default(),
             token_error: None,
-            buffer_start_position: StreamPosition::default(),
-            token_buffer: Vec::with_capacity(16),
-            token_buffer_start_index: 0,
-            token_buffer_reverse_index: 0
+            pushed_back_token: None
         }
     }
 
@@ -135,95 +128,24 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
 
     pub fn next_token(&mut self, check_kw: bool) -> MODE::Tok {
         assert!(self.token_error.is_none());
-        if self.token_buffer_reverse_index > 0 {
-            if let Some(tok) = self.check_saved_token(check_kw) {
-                return tok;
-            }
+        if let Some(tok) = self.pushed_back_token.take() {
+            return tok;
         }
         self.read_token(check_kw)
     }
 
-    fn check_saved_token(&mut self, check_kw: bool) -> Option<MODE::Tok> {
-        let idx = self.saved_token_index();
-        assert!(idx < self.token_buffer.len());
-        let (token, token_check_kw) = {
-            let token_checkkw_ref = unsafe { self.token_buffer.get_unchecked(idx) };
-            (token_checkkw_ref.0.clone(), token_checkkw_ref.1)
-        };
-
-        // There are three conditions where we don't have to reparse old tokens:
-        // 1. The check-kw modes match.
-        // 2. This call wants check_kw AND the token is NOT an identifier.
-        // 3. This call wants no-check_kw AND the token is NOT a keyword.
-        if (check_kw == token_check_kw) ||
-           (check_kw && !token.kind().is_identifier()) ||
-           (!check_kw && !token.kind().is_keyword())
-        {
-            self.token_buffer_reverse_index -= 1;
-            return Some(token);
-        }
-
-        // Otherwise, clear the stream to the reset position, and clear the saved
-        // tokens.
-        self.token_buffer.truncate(idx);
-        self.input_stream.rewind(token.start_offset());
-        self.token_buffer_reverse_index = 0;
-        None
-    }
-
     pub fn mark_position(&self) -> TokenizerPosition {
-        TokenizerPosition(self.token_buffer_start_index + self.saved_token_index())
+        assert!(self.token_error.is_none());
+        if let Some(ref tok) = self.pushed_back_token {
+            TokenizerPosition(tok.start_offset())
+        } else {
+            TokenizerPosition(self.input_stream.mark())
+        }
     }
     pub fn rewind_position(&mut self, position: TokenizerPosition) {
-        assert!(position.0 >= self.token_buffer_start_index);
-
-        let buffer_index = position.0 - self.token_buffer_start_index;
-        assert!(buffer_index < self.token_buffer.len());
-
-        self.token_buffer_reverse_index = self.token_buffer.len() - buffer_index;
-    }
-    pub fn clear_backtracking(&mut self) {
-        let length = self.token_buffer.len();
-        // If token buffer is small, ignore.
-        if length < 16 {
-            return;
-        }
-
-        // If token buffer can just be cleared, do that.  This should be the common case.
-        if self.token_buffer_reverse_index == 0 {
-            self.token_buffer_start_index += length;
-            self.token_buffer.clear();
-            return;
-        }
-
-        // If we can clear out more than half the buffer, do that.
-        if self.token_buffer_reverse_index > length/2 {
-            // We can use swap_remove to shift out the bottom tokens
-            // without allocating a new Vec.
-
-            let forward_skip = length - self.token_buffer_reverse_index;
-
-            // New length of vector will be self.token_buffer_reverse_index.
-            let mut cur = self.token_buffer_reverse_index - 1;
-            loop {
-                self.token_buffer.swap_remove(cur);
-                if cur == 0 {
-                    break;
-                }
-                cur -= 1;
-            }
-
-            self.token_buffer.truncate(self.token_buffer_reverse_index);
-            self.token_buffer_start_index += forward_skip;
-        }
-
-        // Otherwise do nothing.
-    }
-
-    #[inline(always)]
-    fn saved_token_index(&self) -> usize {
-        assert!(self.token_buffer_reverse_index <= self.token_buffer.len());
-        self.token_buffer.len() - self.token_buffer_reverse_index
+        assert!(position <= self.mark_position());
+        self.pushed_back_token = None;
+        self.input_stream.rewind(position.0);
     }
 
     fn read_token(&mut self, check_kw: bool) -> MODE::Tok {
@@ -870,11 +792,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     fn emit_token_impl(&mut self, kind: TokenKind, check_kw: bool) -> MODE::Tok {
         let token_end_position = self.input_stream.mark();
         let token_location = TokenLocation::new(self.token_start_position, token_end_position);
-        let token = self.tokenizer_mode.make_token(kind, token_location);
-
-        assert!(self.token_buffer_reverse_index == 0);
-        self.token_buffer.push((token.clone(), check_kw));
-        token
+        self.tokenizer_mode.make_token(kind, token_location)
     }
 
     fn emit_token(&mut self, kind: TokenKind) -> MODE::Tok {

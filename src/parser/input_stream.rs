@@ -2,7 +2,7 @@
 use parser::char_utils::{AsciiChar, NonAsciiChar};
 use std::slice;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StreamPosition(u32);
 impl StreamPosition {
     pub fn default() -> StreamPosition {
