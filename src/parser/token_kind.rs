@@ -93,12 +93,6 @@ impl TokenKind {
         self.0 == TOK_FLOAT_LITERAL.0
     }
 
-    pub fn is_atomic_expr(&self) -> bool {
-        ((self.0 >= TOK_IDENTIFIER.0) && (self.0 <= TOK_FLOAT_LITERAL.0)) ||
-            (self.0 == TOK_THIS_KEYWORD.0) || (self.0 == TOK_NULL_KEYWORD.0) ||
-            (self.0 == TOK_TRUE_KEYWORD.0) || (self.0 == TOK_FALSE_KEYWORD.0)
-    }
-
 
     pub fn open_paren() -> TokenKind {
         TokenKind(TOK_OPEN_PAREN.0)
@@ -648,6 +642,19 @@ impl TokenKind {
 
     pub fn is_keyword(&self) -> bool {
         (self.0 >= MIN_KEYWORD_TOK_ID) && (self.0 <= MAX_KEYWORD_TOK_ID)
+    }
+
+    pub fn is_atomic_expr(&self) -> bool {
+        ((self.0 >= TOK_IDENTIFIER.0) && (self.0 <= TOK_FLOAT_LITERAL.0)) ||
+            (self.0 == TOK_THIS_KEYWORD.0) || (self.0 == TOK_NULL_KEYWORD.0) ||
+            (self.0 == TOK_TRUE_KEYWORD.0) || (self.0 == TOK_FALSE_KEYWORD.0)
+    }
+
+    pub fn is_unary_op(&self) -> bool {
+        (self.0 == TOK_PLUS_PLUS.0) || (self.0 == TOK_MINUS_MINUS.0) ||
+            (self.0 == TOK_DELETE_KEYWORD.0) || (self.0 == TOK_VOID_KEYWORD.0) ||
+            (self.0 == TOK_TYPEOF_KEYWORD.0) || (self.0 == TOK_PLUS.0) ||
+            (self.0 == TOK_MINUS.0) || (self.0 == TOK_BANG.0) || (self.0 == TOK_TILDE.0)
     }
 }
 

@@ -13,6 +13,7 @@ pub enum AstKind {
     IfStmt,
     ExprStmt,
 
+    UnaryOpExpr,
     BinaryOpExpr,
     CondExpr,
     AssignExpr,
@@ -518,6 +519,48 @@ impl AstNode for CommaExprNode {
         self.left_expr.write_tree(w)?;
         w.write_str(", ")?;
         self.right_expr.write_tree(w)?;
+        w.write_str("}")?;
+        Ok(())
+    }
+}
+
+/*****************************************************************************
+ **** UnaryOpExprNode ********************************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct UnaryOpExprNode {
+    unary_op: FullToken,
+    sub_expr: Box<AstNode>
+}
+impl UnaryOpExprNode {
+    pub fn new(unary_op: FullToken, sub_expr: Box<AstNode>) -> UnaryOpExprNode {
+        assert!(unary_op.kind().is_unary_op());
+        assert!(sub_expr.is_expression());
+        UnaryOpExprNode { unary_op, sub_expr }
+    }
+
+    pub fn unary_op(&self) -> &FullToken {
+        &self.unary_op
+    }
+    pub fn sub_expr(&self) -> &AstNode {
+        self.sub_expr.as_ref()
+    }
+}
+impl AstNode for UnaryOpExprNode {
+    fn kind(&self) -> AstKind {
+        AstKind::UnaryOpExpr
+    }
+    fn is_statement(&self) -> bool {
+        false
+    }
+    fn is_expression(&self) -> bool {
+        true
+    }
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("UnaryOpExpr(")?;
+        self.unary_op.write_token(w)?;
+        w.write_str("){")?;
+        self.sub_expr.write_tree(w)?;
         w.write_str("}")?;
         Ok(())
     }

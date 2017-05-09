@@ -216,8 +216,13 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         -> MaybeParseResult<Box<AstNode>>
     {
         if tok.kind().is_atomic_expr() {
-            let name_expr = Box::new(ast::AtomicExprNode::new(tok));
-            return Ok(Some(self.parse_rest_of_expression(name_expr, precedence)?));
+            let atomic_expr = Box::new(ast::AtomicExprNode::new(tok));
+            return Ok(Some(self.parse_rest_of_expression(atomic_expr, precedence)?));
+        }
+        if tok.kind().is_unary_op() {
+            let sub_expr = self.parse_expression(Precedence::unary())?;
+            let unary_expr = Box::new(ast::UnaryOpExprNode::new(tok, sub_expr));
+            return Ok(Some(self.parse_rest_of_expression(unary_expr, precedence)?));
         }
         Ok(None)
     }
