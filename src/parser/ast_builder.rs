@@ -149,13 +149,28 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 Some(token) => token,
                 None => { return Err(ParseError::ExpectedVariableName); }
             };
-            var_statement.add_variable(name_token);
 
             let next_tok = self.next_token()?;
             if next_tok.kind().is_semicolon() {
                 break;
             }
+            if next_tok.kind().is_assign() {
+                // Parse an initializer.
+                let boxed_expr = self.parse_expression(Precedence::assignment())?;
+                println!("Got init expr: {}", boxed_expr.tree_string());
+                var_statement.add_var_decl_with_init(name_token, boxed_expr);
+
+                let next_tok = self.next_token()?;
+                if next_tok.kind().is_semicolon() {
+                    break;
+                }
+                if next_tok.kind().is_comma() {
+                    continue;
+                }
+                return Err(ParseError::ExpectedCommaOrSemicolon);
+            }
             if next_tok.kind().is_comma() {
+                var_statement.add_var_decl(name_token);
                 continue;
             }
             return Err(ParseError::ExpectedCommaOrSemicolon);

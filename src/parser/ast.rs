@@ -114,18 +114,22 @@ impl AstNode for BlockStmtNode {
  *****************************************************************************/
 #[derive(Debug)]
 pub struct VarStmtNode {
-    variables: Vec<Box<FullToken>>
+    var_decls: Vec<VarDecl>
 }
 impl VarStmtNode {
     pub fn new() -> VarStmtNode {
-        VarStmtNode { variables: Vec::with_capacity(1) }
+        VarStmtNode { var_decls: Vec::with_capacity(1) }
     }
 
-    pub fn variables(&self) -> &Vec<Box<FullToken>> {
-        &self.variables
+    pub fn var_decls(&self) -> &Vec<VarDecl> {
+        &self.var_decls
     }
-    pub fn add_variable(&mut self, var: FullToken) {
-        self.variables.push(Box::new(var));
+
+    pub fn add_var_decl(&mut self, name: FullToken) {
+        self.var_decls.push(VarDecl::new(name, None));
+    }
+    pub fn add_var_decl_with_init(&mut self, name: FullToken, init: Box<AstNode>) {
+        self.var_decls.push(VarDecl::new(name, Some(init)));
     }
 }
 impl AstNode for VarStmtNode {
@@ -142,14 +146,51 @@ impl AstNode for VarStmtNode {
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         w.write_str("Var{")?;
         let mut first = true;
-        for variable in &self.variables {
+        for var_decl in &self.var_decls {
             if ! first {
                 w.write_str(", ")?;
             }
             first = false;
-            variable.write_token(w)?;
+            var_decl.write_tree(w)?;
         }
         w.write_str("}")?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct VarDecl {
+    name: FullToken,
+    init_expr: Option<Box<AstNode>>
+}
+impl VarDecl {
+    pub fn new(name: FullToken, init_expr: Option<Box<AstNode>>) -> VarDecl {
+        assert!(name.kind().is_identifier());
+        assert!(init_expr.as_ref().map_or(true, |boxed_expr| boxed_expr.is_expression()));
+
+        VarDecl { name, init_expr }
+    }
+
+    pub fn name(&self) -> &FullToken {
+        &self.name
+    }
+    pub fn has_init_expr(&self) -> bool {
+        self.init_expr.is_some()
+    }
+    pub fn init_expr(&self) -> Option<&AstNode> {
+        if let Some(ref boxed_expr) = self.init_expr {
+            Some(boxed_expr.as_ref())
+        } else {
+            None
+        }
+    }
+
+    pub fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        self.name.write_token(w)?;
+        if let Some(ref expr) = self.init_expr {
+            w.write_str(" = ")?;
+            expr.write_tree(w)?;
+        }
         Ok(())
     }
 }
