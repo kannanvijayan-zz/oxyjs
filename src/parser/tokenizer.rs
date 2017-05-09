@@ -457,6 +457,17 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         } else if tail_word == Self::make_tail_word_2('i', 'n') {
             return self.emit_token_check_kw(TokenKind::in_keyword());
 
+        } else if tail_word == Self::make_tail_word_4('n', 'u', 'l', 'l') {
+            return self.emit_token_check_kw(TokenKind::null_keyword());
+
+        } else if tail_word == Self::make_tail_word_4('t', 'r', 'u', 'e') {
+            return self.emit_token_check_kw(TokenKind::true_keyword());
+
+        } else if tail_word == Self::make_tail_word_4('a', 'l', 's', 'e') {
+            if self.input_stream.check_ascii_text(&['f'], self.token_start_position) {
+                return self.emit_token_check_kw(TokenKind::false_keyword());
+            }
+
         } else if tail_word == Self::make_tail_word_4('p', 'e', 'o', 'f') {
             if self.input_stream.check_ascii_text(&['t','y'], self.token_start_position) {
                 return self.emit_token_check_kw(TokenKind::typeof_keyword());

@@ -93,6 +93,12 @@ impl TokenKind {
         self.0 == TOK_FLOAT_LITERAL.0
     }
 
+    pub fn is_atomic_expr(&self) -> bool {
+        ((self.0 >= TOK_IDENTIFIER.0) && (self.0 <= TOK_FLOAT_LITERAL.0)) ||
+            (self.0 == TOK_THIS_KEYWORD.0) || (self.0 == TOK_NULL_KEYWORD.0) ||
+            (self.0 == TOK_TRUE_KEYWORD.0) || (self.0 == TOK_FALSE_KEYWORD.0)
+    }
+
 
     pub fn open_paren() -> TokenKind {
         TokenKind(TOK_OPEN_PAREN.0)
@@ -507,6 +513,13 @@ impl TokenKind {
         self.0 == TOK_ELSE_KEYWORD.0
     }
 
+    pub fn false_keyword() -> TokenKind {
+        TokenKind(TOK_FALSE_KEYWORD.0)
+    }
+    pub fn is_false_keyword(&self) -> bool {
+        self.0 == TOK_FALSE_KEYWORD.0
+    }
+
     pub fn finally_keyword() -> TokenKind {
         TokenKind(TOK_FINALLY_KEYWORD.0)
     }
@@ -556,6 +569,13 @@ impl TokenKind {
         self.0 == TOK_NEW_KEYWORD.0
     }
 
+    pub fn null_keyword() -> TokenKind {
+        TokenKind(TOK_NULL_KEYWORD.0)
+    }
+    pub fn is_null_keyword(&self) -> bool {
+        self.0 == TOK_NULL_KEYWORD.0
+    }
+
     pub fn return_keyword() -> TokenKind {
         TokenKind(TOK_RETURN_KEYWORD.0)
     }
@@ -582,6 +602,13 @@ impl TokenKind {
     }
     pub fn is_throw_keyword(&self) -> bool {
         self.0 == TOK_THROW_KEYWORD.0
+    }
+
+    pub fn true_keyword() -> TokenKind {
+        TokenKind(TOK_TRUE_KEYWORD.0)
+    }
+    pub fn is_true_keyword(&self) -> bool {
+        self.0 == TOK_TRUE_KEYWORD.0
     }
 
     pub fn try_keyword() -> TokenKind {
@@ -707,18 +734,21 @@ const TOK_DEFAULT_KEYWORD: (u8, &'static str) = (TOK_CONTINUE_KEYWORD.0 + 1, "de
 const TOK_DELETE_KEYWORD: (u8, &'static str) = (TOK_DEFAULT_KEYWORD.0 + 1, "delete_keyword");
 const TOK_DO_KEYWORD: (u8, &'static str) = (TOK_DELETE_KEYWORD.0 + 1, "do_keyword");
 const TOK_ELSE_KEYWORD: (u8, &'static str) = (TOK_DO_KEYWORD.0 + 1, "else_keyword");
-const TOK_FINALLY_KEYWORD: (u8, &'static str) = (TOK_ELSE_KEYWORD.0 + 1, "finally_keyword");
+const TOK_FALSE_KEYWORD: (u8, &'static str) = (TOK_ELSE_KEYWORD.0 + 1, "false_keyword");
+const TOK_FINALLY_KEYWORD: (u8, &'static str) = (TOK_FALSE_KEYWORD.0 + 1, "finally_keyword");
 const TOK_FOR_KEYWORD: (u8, &'static str) = (TOK_FINALLY_KEYWORD.0 + 1, "for_keyword");
 const TOK_FUNCTION_KEYWORD: (u8, &'static str) = (TOK_FOR_KEYWORD.0 + 1, "function_keyword");
 const TOK_IF_KEYWORD: (u8, &'static str) = (TOK_FUNCTION_KEYWORD.0 + 1, "if_keyword");
 const TOK_IN_KEYWORD: (u8, &'static str) = (TOK_IF_KEYWORD.0 + 1, "in_keyword");
 const TOK_INSTANCEOF_KEYWORD: (u8, &'static str) = (TOK_IN_KEYWORD.0 + 1, "instanceof_keyword");
 const TOK_NEW_KEYWORD: (u8, &'static str) = (TOK_INSTANCEOF_KEYWORD.0 + 1, "new_keyword");
-const TOK_RETURN_KEYWORD: (u8, &'static str) = (TOK_NEW_KEYWORD.0 + 1, "return_keyword");
+const TOK_NULL_KEYWORD: (u8, &'static str) = (TOK_NEW_KEYWORD.0 + 1, "null_keyword");
+const TOK_RETURN_KEYWORD: (u8, &'static str) = (TOK_NULL_KEYWORD.0 + 1, "return_keyword");
 const TOK_SWITCH_KEYWORD: (u8, &'static str) = (TOK_RETURN_KEYWORD.0 + 1, "switch_keyword");
 const TOK_THIS_KEYWORD: (u8, &'static str) = (TOK_SWITCH_KEYWORD.0 + 1, "this_keyword");
 const TOK_THROW_KEYWORD: (u8, &'static str) = (TOK_THIS_KEYWORD.0 + 1, "throw_keyword");
-const TOK_TRY_KEYWORD: (u8, &'static str) = (TOK_THROW_KEYWORD.0 + 1, "try_keyword");
+const TOK_TRUE_KEYWORD: (u8, &'static str) = (TOK_THROW_KEYWORD.0 + 1, "true_keyword");
+const TOK_TRY_KEYWORD: (u8, &'static str) = (TOK_TRUE_KEYWORD.0 + 1, "try_keyword");
 const TOK_TYPEOF_KEYWORD: (u8, &'static str) = (TOK_TRY_KEYWORD.0 + 1, "typeof_keyword");
 const TOK_VAR_KEYWORD: (u8, &'static str) = (TOK_TYPEOF_KEYWORD.0 + 1, "var_keyword");
 const TOK_VOID_KEYWORD: (u8, &'static str) = (TOK_VAR_KEYWORD.0 + 1, "void_keyword");
@@ -809,6 +839,7 @@ unsafe fn init_tok_strings() {
     update_array(&TOK_DELETE_KEYWORD);
     update_array(&TOK_DO_KEYWORD);
     update_array(&TOK_ELSE_KEYWORD);
+    update_array(&TOK_FALSE_KEYWORD);
     update_array(&TOK_FINALLY_KEYWORD);
     update_array(&TOK_FOR_KEYWORD);
     update_array(&TOK_FUNCTION_KEYWORD);
@@ -816,10 +847,12 @@ unsafe fn init_tok_strings() {
     update_array(&TOK_IN_KEYWORD);
     update_array(&TOK_INSTANCEOF_KEYWORD);
     update_array(&TOK_NEW_KEYWORD);
+    update_array(&TOK_NULL_KEYWORD);
     update_array(&TOK_RETURN_KEYWORD);
     update_array(&TOK_SWITCH_KEYWORD);
     update_array(&TOK_THIS_KEYWORD);
     update_array(&TOK_THROW_KEYWORD);
+    update_array(&TOK_TRUE_KEYWORD);
     update_array(&TOK_TRY_KEYWORD);
     update_array(&TOK_TYPEOF_KEYWORD);
     update_array(&TOK_VAR_KEYWORD);

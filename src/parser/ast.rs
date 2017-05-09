@@ -17,7 +17,7 @@ pub enum AstKind {
     CondExpr,
     AssignExpr,
     CommaExpr,
-    NameExpr
+    AtomicExpr
 }
 impl AstKind {
     fn to_string(&self) -> String {
@@ -524,25 +524,25 @@ impl AstNode for CommaExprNode {
 }
 
 /*****************************************************************************
- **** NameExprNode ***********************************************************
+ **** AtomicExprNode *********************************************************
  *****************************************************************************/
 #[derive(Debug)]
-pub struct NameExprNode {
+pub struct AtomicExprNode {
     name: FullToken
 }
-impl NameExprNode {
-    pub fn new(name: FullToken) -> NameExprNode {
-        assert!(name.kind().is_identifier());
-        NameExprNode { name }
+impl AtomicExprNode {
+    pub fn new(name: FullToken) -> AtomicExprNode {
+        assert!(name.kind().is_atomic_expr());
+        AtomicExprNode { name }
     }
 
     pub fn name(&self) -> &FullToken {
         &self.name
     }
 }
-impl AstNode for NameExprNode {
+impl AstNode for AtomicExprNode {
     fn kind(&self) -> AstKind {
-        AstKind::NameExpr
+        AstKind::AtomicExpr
     }
     fn is_statement(&self) -> bool {
         false
@@ -551,7 +551,7 @@ impl AstNode for NameExprNode {
         true
     }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
-        w.write_str("NameExpr{")?;
+        w.write_str("AtomicExpr{")?;
         self.name.write_token(w);
         w.write_str("}")?;
         Ok(())

@@ -135,7 +135,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             return Ok(Some(self.parse_if_statement()?));
         }
 
-        if let Some(boxed_expr) = self.try_parse_expression(tok, Precedence::lowest())? {
+        if let Some(boxed_expr) = self.try_parse_expression_with(tok, Precedence::lowest())? {
             return Ok(Some(Box::new(ast::ExprStmtNode::new(boxed_expr))));
         }
 
@@ -205,18 +205,18 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
 
     fn parse_expression(&mut self, precedence: Precedence) -> ParseResult<Box<AstNode>> {
         let token = self.next_token()?;
-        if let Some(boxed_expr) = self.try_parse_expression(token, precedence)? {
+        if let Some(boxed_expr) = self.try_parse_expression_with(token, precedence)? {
             return Ok(boxed_expr);
         }
 
         Err(ParseError::ExpectedExpression)
     }
 
-    fn try_parse_expression(&mut self, tok: FullToken, precedence: Precedence)
+    fn try_parse_expression_with(&mut self, tok: FullToken, precedence: Precedence)
         -> MaybeParseResult<Box<AstNode>>
     {
-        if tok.kind().is_identifier() {
-            let name_expr = Box::new(ast::NameExprNode::new(tok));
+        if tok.kind().is_atomic_expr() {
+            let name_expr = Box::new(ast::AtomicExprNode::new(tok));
             return Ok(Some(self.parse_rest_of_expression(name_expr, precedence)?));
         }
         Ok(None)
