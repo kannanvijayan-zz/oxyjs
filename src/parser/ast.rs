@@ -13,6 +13,7 @@ pub enum AstKind {
     IfStmt,
     ExprStmt,
 
+    PostfixOpExpr,
     UnaryOpExpr,
     BinaryOpExpr,
     CondExpr,
@@ -519,6 +520,49 @@ impl AstNode for CommaExprNode {
         self.left_expr.write_tree(w)?;
         w.write_str(", ")?;
         self.right_expr.write_tree(w)?;
+        w.write_str("}")?;
+        Ok(())
+    }
+}
+
+/*****************************************************************************
+ **** PostfixOpExprNode ******************************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct PostfixOpExprNode {
+    postfix_op: FullToken,
+    sub_expr: Box<AstNode>
+}
+impl PostfixOpExprNode {
+    pub fn new(postfix_op: FullToken, sub_expr: Box<AstNode>) -> PostfixOpExprNode {
+        assert!(postfix_op.kind().is_plus_plus() || postfix_op.kind().is_minus_minus());
+        assert!(sub_expr.is_expression());
+        // FIXME: assert that sub_expr is a valid LVALUE expr.
+        PostfixOpExprNode { postfix_op, sub_expr }
+    }
+
+    pub fn postfix_op(&self) -> &FullToken {
+        &self.postfix_op
+    }
+    pub fn sub_expr(&self) -> &AstNode {
+        self.sub_expr.as_ref()
+    }
+}
+impl AstNode for PostfixOpExprNode {
+    fn kind(&self) -> AstKind {
+        AstKind::PostfixOpExpr
+    }
+    fn is_statement(&self) -> bool {
+        false
+    }
+    fn is_expression(&self) -> bool {
+        true
+    }
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("PostfixOpExpr(")?;
+        self.postfix_op.write_token(w)?;
+        w.write_str("){")?;
+        self.sub_expr.write_tree(w)?;
         w.write_str("}")?;
         Ok(())
     }

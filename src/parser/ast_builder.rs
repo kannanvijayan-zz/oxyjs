@@ -33,6 +33,9 @@ impl Token for FullToken {
     fn start_offset(&self) -> StreamPosition {
         self.location.start_offset()
     }
+    fn end_offset(&self) -> StreamPosition {
+        self.location.end_offset()
+    }
     fn write_token(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
         write!(w, "Token({}@{})", self.kind.name(), self.location.range_string())
     }
@@ -383,6 +386,18 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
 
                 let right_expr = self.parse_expression(Precedence::multiplicative())?;
                 cur_expr = Box::new(ast::BinaryOpExprNode::new(tok, cur_expr, right_expr));
+                continue;
+            }
+
+            if tok.kind().is_plus_plus() || tok.kind().is_minus_minus() {
+                // Precedence doesn't matter here.  The '++' applies to the left-hand-side
+                // expression directly.  Only thing to look out for is skipped newlines.
+                if self.skipped_newline {
+                    self.rewind_position(position);
+                    return Ok(cur_expr);
+                }
+
+                cur_expr = Box::new(ast::PostfixOpExprNode::new(tok, cur_expr));
                 continue;
             }
 

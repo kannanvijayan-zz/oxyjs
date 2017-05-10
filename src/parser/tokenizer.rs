@@ -61,7 +61,9 @@ pub trait Token where Self: Clone + Eq {
     fn make(kind: TokenKind, location: TokenLocation) -> Self;
     fn kind(&self) -> TokenKind;
     fn start_offset(&self) -> StreamPosition;
+    fn end_offset(&self) -> StreamPosition;
     fn write_token(&self, w: &mut fmt::Write) -> Result<(), fmt::Error>;
+
     fn token_string(&self) -> String {
         let mut str = String::new();
         self.write_token(&mut str).unwrap();
@@ -104,8 +106,7 @@ pub struct Tokenizer<STREAM: InputStream, MODE: TokenizerMode> {
     input_stream: STREAM,
     tokenizer_mode: MODE,
     token_start_position: StreamPosition,
-    token_error: Option<TokenError>,
-    pushed_back_token: Option<MODE::Tok>
+    token_error: Option<TokenError>
 }
 impl<STREAM, MODE> Tokenizer<STREAM, MODE>
     where STREAM: InputStream,
@@ -116,8 +117,7 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             input_stream: input_stream,
             tokenizer_mode: tokenizer_mode,
             token_start_position: StreamPosition::default(),
-            token_error: None,
-            pushed_back_token: None
+            token_error: None
         }
     }
 
@@ -128,33 +128,15 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
 
     pub fn next_token(&mut self, check_kw: bool) -> MODE::Tok {
         assert!(self.token_error.is_none());
-        if let Some(tok) = self.pushed_back_token.take() {
-            // If check_kw=true, and tok is an identifier, then the token
-            // might really have been a keyword that was parsed an identifier
-            // due to check_kw=false.  Reparse.
-            // If check_kw=false, and tok is a keyword, then reparse.
-            if (check_kw && tok.kind().is_identifier()) ||
-                (!check_kw && tok.kind().is_keyword()) {
-                self.input_stream.rewind(tok.start_offset());
-                return self.read_token(check_kw);
-            }
-
-            return tok;
-        }
         self.read_token(check_kw)
     }
 
     pub fn mark_position(&self) -> TokenizerPosition {
         assert!(self.token_error.is_none());
-        if let Some(ref tok) = self.pushed_back_token {
-            TokenizerPosition(tok.start_offset())
-        } else {
-            TokenizerPosition(self.input_stream.mark())
-        }
+        TokenizerPosition(self.input_stream.mark())
     }
     pub fn rewind_position(&mut self, position: TokenizerPosition) {
         assert!(position <= self.mark_position());
-        self.pushed_back_token = None;
         self.input_stream.rewind(position.0);
     }
 
