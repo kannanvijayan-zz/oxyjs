@@ -13,6 +13,8 @@ pub enum AstKind {
     IfStmt,
     ExprStmt,
 
+    PropertyExpr,
+    ConstructExpr,
     PostfixOpExpr,
     UnaryOpExpr,
     BinaryOpExpr,
@@ -605,6 +607,110 @@ impl AstNode for UnaryOpExprNode {
         self.unary_op.write_token(w)?;
         w.write_str("){")?;
         self.sub_expr.write_tree(w)?;
+        w.write_str("}")?;
+        Ok(())
+    }
+}
+
+/*****************************************************************************
+ **** ConstructExprNode ******************************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct ConstructExprNode {
+    sub_expr: Box<AstNode>,
+    arguments: Vec<Box<AstNode>>,
+    has_arguments: bool
+}
+impl ConstructExprNode {
+    pub fn new_bare(sub_expr: Box<AstNode>) -> ConstructExprNode {
+        assert!(sub_expr.is_expression());
+        // FIXME: assert that sub_expr is a valid MEMBER expr.
+        ConstructExprNode { sub_expr, arguments: Vec::new(), has_arguments: false }
+    }
+    pub fn new_with_arguments(sub_expr: Box<AstNode>, arguments: Vec<Box<AstNode>>)
+        -> ConstructExprNode
+    {
+        assert!(sub_expr.is_expression());
+        // FIXME: assert that sub_expr is a valid MEMBER expr.
+        ConstructExprNode { sub_expr, arguments, has_arguments: false }
+    }
+
+    pub fn sub_expr(&self) -> &AstNode {
+        self.sub_expr.as_ref()
+    }
+    pub fn has_arguments(&self) -> bool {
+        self.has_arguments
+    }
+    pub fn arguments(&self) -> &Vec<Box<AstNode>> {
+        &self.arguments
+    }
+}
+impl AstNode for ConstructExprNode {
+    fn kind(&self) -> AstKind {
+        AstKind::ConstructExpr
+    }
+    fn is_statement(&self) -> bool {
+        false
+    }
+    fn is_expression(&self) -> bool {
+        true
+    }
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("ConstructExpr{")?;
+        self.sub_expr.write_tree(w)?;
+        if self.has_arguments {
+            w.write_str("(")?;
+            let mut first = false;
+            for arg in &self.arguments {
+                if ! first {
+                    w.write_str(", ")?;
+                }
+                first = false;
+                arg.write_tree(w)?;
+            }
+        }
+        w.write_str("}")?;
+        Ok(())
+    }
+}
+
+/*****************************************************************************
+ **** PropertyExprNode *******************************************************
+ *****************************************************************************/
+#[derive(Debug)]
+pub struct PropertyExprNode {
+    target_expr: Box<AstNode>,
+    property_name: FullToken
+}
+impl PropertyExprNode {
+    pub fn new(target_expr: Box<AstNode>, property_name: FullToken) -> PropertyExprNode {
+        assert!(target_expr.is_expression());
+        assert!(property_name.kind().is_identifier());
+        PropertyExprNode { target_expr, property_name }
+    }
+
+    pub fn target_expr(&self) -> &AstNode {
+        self.target_expr.as_ref()
+    }
+    pub fn property_name(&self) -> &FullToken {
+        &self.property_name
+    }
+}
+impl AstNode for PropertyExprNode {
+    fn kind(&self) -> AstKind {
+        AstKind::PropertyExpr
+    }
+    fn is_statement(&self) -> bool {
+        false
+    }
+    fn is_expression(&self) -> bool {
+        true
+    }
+    fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
+        w.write_str("PropertyExpr{")?;
+        self.target_expr.write_tree(w)?;
+        w.write_str(";")?;
+        self.property_name.write_token(w)?;
         w.write_str("}")?;
         Ok(())
     }

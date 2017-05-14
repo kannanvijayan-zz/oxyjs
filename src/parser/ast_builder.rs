@@ -60,6 +60,7 @@ pub enum ParseError {
     UnexpectedToken{expected:TokenKind, got:TokenKind},
     ExpectedVariableName,
     ExpectedCommaOrSemicolon,
+    ExpectedCommaOrCloseParen,
     ExpectedExpression,
     ExpectedStatement
 }
@@ -95,7 +96,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     pub fn parse_program(&mut self) -> ParseResult<Box<ast::ProgramNode>> {
         let mut program_node = ast::ProgramNode::new();
         loop {
-            match self.try_parse_statement()? {
+            match self.check_parse_statement()? {
                 Some(boxed_source_element) => {
                     program_node.add_source_element(boxed_source_element);
                 }
@@ -112,14 +113,14 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     }
 
     fn parse_statement(&mut self) -> ParseResult<Box<AstNode>> {
-        if let Some(boxed_stmt) = self.try_parse_statement()? {
+        if let Some(boxed_stmt) = self.check_parse_statement()? {
             Ok(boxed_stmt)
         } else {
             Err(ParseError::ExpectedStatement)
         }
     }
 
-    fn try_parse_statement(&mut self) -> MaybeParseResult<Box<AstNode>> {
+    fn check_parse_statement(&mut self) -> MaybeParseResult<Box<AstNode>> {
         let begin_position = self.mark_position();
         let tok = self.next_token()?;
         if tok.kind().is_open_brace() {
@@ -207,12 +208,21 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> ParseResult<Box<AstNode>> {
-        let token = self.next_token()?;
-        if let Some(boxed_expr) = self.try_parse_expression_with(token, precedence)? {
-            return Ok(boxed_expr);
+        if let Some(boxed_expr) = self.check_parse_expression(precedence)? {
+            Ok(boxed_expr)
+        } else {
+            Err(ParseError::ExpectedExpression)
         }
-
-        Err(ParseError::ExpectedExpression)
+    }
+    fn check_parse_expression(&mut self, precedence: Precedence) -> MaybeParseResult<Box<AstNode>> {
+        let position = self.mark_position();
+        let tok = self.next_token()?;
+        if let Some(expr) = self.try_parse_expression_with(tok, precedence)? {
+            Ok(Some(expr))
+        } else {
+            self.rewind_position(position);
+            Ok(None)
+        }
     }
 
     fn try_parse_expression_with(&mut self, tok: FullToken, precedence: Precedence)
@@ -227,7 +237,87 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             let unary_expr = Box::new(ast::UnaryOpExprNode::new(tok, sub_expr));
             return Ok(Some(self.parse_rest_of_expression(unary_expr, precedence)?));
         }
+        if tok.kind().is_new_keyword() {
+            assert!(precedence <= Precedence::left_hand_side());
+            let mut new_count: usize = 1;
+            loop {
+                let next_tok = self.next_token()?;
+                if ! next_tok.kind().is_new_keyword() {
+                    // Reached end of new keywords - this token must begin a member
+                    // expression.
+                    match self.try_parse_expression_with(next_tok, Precedence::member())? {
+                        Some(member_expr) => {
+                            return Ok(Some(self.parse_new_tail(new_count, member_expr, precedence)?));
+                        }
+                        None => {
+                            return Err(ParseError::ExpectedExpression);
+                        }
+                    }
+                }
+                new_count += 1;
+            }
+        }
         Ok(None)
+    }
+
+    fn parse_new_tail(&mut self, new_count: usize, member_expr: Box<AstNode>,
+                      precedence: Precedence)
+        -> ParseResult<Box<AstNode>>
+    {
+        assert!(precedence <= Precedence::left_hand_side());
+        let mut cur_expr: Box<AstNode> = member_expr;
+        let mut cur_new_count: usize = new_count;
+        loop {
+            // Check for following "(", up to new_count.
+            let position = self.mark_position();
+            let next_tok = self.next_token()?;
+            if ! next_tok.kind().is_open_paren() {
+                self.rewind_position(position);
+                break;
+            }
+            let mut args_vec = Vec::with_capacity(2);
+            self.parse_arguments_list(&mut args_vec)?;
+            self.must_expect_token(TokenKind::close_paren())?;
+            cur_expr = Box::new(ast::ConstructExprNode::new_with_arguments(cur_expr, args_vec));
+            cur_new_count += 1;
+            if cur_new_count == new_count {
+                break;
+            }
+        }
+
+        if cur_new_count == new_count {
+            // If all the 'new's matched with arguments, then we have a MemberExpr
+            // that we just parsed.  Finish the parse with call expr precedence.
+            cur_expr = self.parse_rest_of_expression(cur_expr, Precedence::call())?;
+        } else {
+            // Wrap up the remaining "bare" new expressions.
+            while cur_new_count < new_count {
+                cur_expr = Box::new(ast::ConstructExprNode::new_bare(cur_expr));
+                cur_new_count += 1;
+            }
+        }
+
+        // Parse the rest of the expression with the given precedence.
+        self.parse_rest_of_expression(cur_expr, precedence)
+    }
+
+    fn parse_arguments_list(&mut self, args_vec: &mut Vec<Box<AstNode>>) -> ParseResult<()> {
+        // Check for immediate ')' token.
+        if self.expect_token(TokenKind::close_paren())? {
+            return Ok(());
+        }
+
+        // Otherwise, parse argument expressions.
+        loop {
+            args_vec.push(self.parse_expression(Precedence::assignment())?);
+            let next_tok = self.next_token()?;
+            if next_tok.kind().is_close_paren() {
+            }
+            if ! next_tok.kind().is_comma() {
+                return Err(ParseError::ExpectedCommaOrCloseParen);
+            }
+        }
+        Ok(())
     }
 
     fn parse_rest_of_expression(&mut self, left_expr: Box<AstNode>, precedence: Precedence)
@@ -397,7 +487,17 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                     return Ok(cur_expr);
                 }
 
+                // FIXME: Check that cur_expr is a proper LVALUE expression.
+
                 cur_expr = Box::new(ast::PostfixOpExprNode::new(tok, cur_expr));
+                continue;
+            }
+
+            if tok.kind().is_dot() {
+                // We should only ever see "dot" with precedence levels <= member.
+                assert!(precedence <= Precedence::member());
+                let name_tok = self.must_expect_get_token(TokenKind::identifier())?;
+                cur_expr = Box::new(ast::PropertyExprNode::new(cur_expr, name_tok));
                 continue;
             }
 
@@ -415,6 +515,18 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         let token = self.next_token()?;
         if token.kind() == kind {
             Ok(())
+        } else {
+            self.rewind_position(position);
+            Err(ParseError::UnexpectedToken {expected: kind, got: token.kind()})
+        }
+    }
+
+    fn must_expect_get_token(&mut self, kind: TokenKind) -> ParseResult<FullToken> {
+        // Mark the position so we can backtrack.
+        let position = self.mark_position();
+        let token = self.next_token()?;
+        if token.kind() == kind {
+            Ok(token)
         } else {
             self.rewind_position(position);
             Err(ParseError::UnexpectedToken {expected: kind, got: token.kind()})

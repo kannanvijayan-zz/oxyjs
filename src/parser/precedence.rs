@@ -54,8 +54,8 @@ impl Precedence {
     pub fn left_hand_side() -> Precedence {
         Precedence(PREC_LEFT_HAND_SIDE)
     }
-    pub fn call_or_new() -> Precedence {
-        Precedence(PREC_CALL_OR_NEW)
+    pub fn call() -> Precedence {
+        Precedence(PREC_CALL)
     }
     pub fn member() -> Precedence {
         Precedence(PREC_MEMBER)
@@ -83,8 +83,8 @@ const PREC_MULTIPLICATIVE: u8 = PREC_ADDITIVE + 1;
 const PREC_UNARY: u8 = PREC_MULTIPLICATIVE + 1;
 const PREC_POSTFIX: u8 = PREC_UNARY + 1;
 const PREC_LEFT_HAND_SIDE: u8 = PREC_POSTFIX + 1;
-const PREC_CALL_OR_NEW: u8 = PREC_LEFT_HAND_SIDE + 1;
-const PREC_MEMBER: u8 = PREC_CALL_OR_NEW + 1;
+const PREC_CALL: u8 = PREC_LEFT_HAND_SIDE + 1;
+const PREC_MEMBER: u8 = PREC_CALL + 1;
 const PREC_PRIMARY: u8 = PREC_MEMBER + 1;
 
 const PREC_HIGHEST: u8 = 0xff;
