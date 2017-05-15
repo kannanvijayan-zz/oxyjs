@@ -1,4 +1,5 @@
 
+use std::borrow::Borrow;
 use std::fmt;
 
 use parser::ast;
@@ -83,7 +84,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         // Just read tokens and print them out until we're done, then return Error.
         loop {
             let token = self.next_token().unwrap();
-            println!("Token: {}", token.kind().name());
+            self.log_debug(format!("Token: {}", token.kind().name()));
             if token.kind().is_error() {
                 panic!("Got token error: {:?}", self.tokenizer.get_error());
             }
@@ -94,10 +95,13 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     }
 
     pub fn parse_program(&mut self) -> ParseResult<Box<ast::ProgramNode>> {
+        self.log_debug(format!("parse_program() BEGIN"));
         let mut program_node = ast::ProgramNode::new();
         loop {
+            self.log_debug(format!("parse_program() LOOP"));
             match self.check_parse_statement()? {
                 Some(boxed_source_element) => {
+                    self.log_debug(format!("parse_program() GOT SOURCE ELEMENT"));
                     program_node.add_source_element(boxed_source_element);
                 }
                 None => {
@@ -107,42 +111,55 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         }
 
         // Must have reached end of stream.
+        self.log_debug(format!("parse_program() CHECK FOR END"));
         self.must_expect_token(TokenKind::end())?;
 
+        self.log_debug(format!("parse_program() END"));
         Ok(Box::new(program_node))
     }
 
     fn parse_statement(&mut self) -> ParseResult<Box<AstNode>> {
+        self.log_debug(format!("parse_statement() BEGIN"));
         if let Some(boxed_stmt) = self.check_parse_statement()? {
+            self.log_debug(format!("parse_statement() GOT STATEMENT"));
             Ok(boxed_stmt)
         } else {
+            self.log_debug(format!("parse_statement() NO STATEMENT"));
             Err(ParseError::ExpectedStatement)
         }
     }
 
     fn check_parse_statement(&mut self) -> MaybeParseResult<Box<AstNode>> {
+        self.log_debug(format!("check_parse_statement() BEGIN"));
         let begin_position = self.mark_position();
         let tok = self.next_token()?;
         if tok.kind().is_open_brace() {
+            self.log_debug(format!("check_parse_statement() OPEN BRACE"));
             // FIXME: parse either a block or an object literal.
             // The spec says a '{' at the statement level can only be a block,
             // but practical implementations seem to allow bare object literals.
             return Ok(Some(self.parse_block_statement()?));
         }
         if tok.kind().is_var_keyword() {
+            self.log_debug(format!("check_parse_statement() VAR"));
             return Ok(Some(self.parse_var_statement()?));
         }
         if tok.kind().is_semicolon() {
+            self.log_debug(format!("check_parse_statement() SEMICOLON"));
             return Ok(Some(Box::new(ast::EmptyStmtNode::new())));
         }
         if tok.kind().is_if_keyword() {
+            self.log_debug(format!("check_parse_statement() IF"));
             return Ok(Some(self.parse_if_statement()?));
         }
 
+        self.log_debug(format!("check_parse_statement() CHECKING FOR EXPRESSION"));
         if let Some(boxed_expr) = self.try_parse_expression_with(tok, Precedence::lowest())? {
+            self.log_debug(format!("check_parse_statement() GOT EXPRESSION"));
             return Ok(Some(Box::new(ast::ExprStmtNode::new(boxed_expr))));
         }
 
+        self.log_debug(format!("check_parse_statement() END (FAILED)"));
         self.rewind_position(begin_position);
         Ok(None)
     }
@@ -170,7 +187,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             if next_tok.kind().is_assign() {
                 // Parse an initializer.
                 let boxed_expr = self.parse_expression(Precedence::assignment())?;
-                println!("Got init expr: {}", boxed_expr.tree_string());
+                self.log_debug(format!("Got init expr: {}", boxed_expr.tree_string()));
                 var_statement.add_var_decl_with_init(name_token, boxed_expr);
 
                 let next_tok = self.next_token()?;
@@ -228,16 +245,20 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     fn try_parse_expression_with(&mut self, tok: FullToken, precedence: Precedence)
         -> MaybeParseResult<Box<AstNode>>
     {
+        self.log_debug("try_parse_expression_with() BEGIN");
         if tok.kind().is_atomic_expr() {
+            self.log_debug("try_parse_expression_with() HANDLE ATOMIC EXPR");
             let atomic_expr = Box::new(ast::AtomicExprNode::new(tok));
             return Ok(Some(self.parse_rest_of_expression(atomic_expr, precedence)?));
         }
         if tok.kind().is_unary_op() {
+            self.log_debug("try_parse_expression_with() HANDLE UNARY OP");
             let sub_expr = self.parse_expression(Precedence::unary())?;
             let unary_expr = Box::new(ast::UnaryOpExprNode::new(tok, sub_expr));
             return Ok(Some(self.parse_rest_of_expression(unary_expr, precedence)?));
         }
         if tok.kind().is_new_keyword() {
+            self.log_debug("try_parse_expression_with() HANDLE NEW");
             assert!(precedence <= Precedence::left_hand_side());
             let mut new_count: usize = 1;
             loop {
@@ -302,8 +323,10 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     }
 
     fn parse_arguments_list(&mut self, args_vec: &mut Vec<Box<AstNode>>) -> ParseResult<()> {
+        self.log_debug("parse_arguments_list() BEGIN");
         // Check for immediate ')' token.
         if self.expect_token(TokenKind::close_paren())? {
+            self.log_debug("parse_arguments_list() GOT CLOSE PAREN");
             return Ok(());
         }
 
@@ -312,6 +335,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             args_vec.push(self.parse_expression(Precedence::assignment())?);
             let next_tok = self.next_token()?;
             if next_tok.kind().is_close_paren() {
+                break;
             }
             if ! next_tok.kind().is_comma() {
                 return Err(ParseError::ExpectedCommaOrCloseParen);
@@ -325,10 +349,13 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     {
         assert!(left_expr.is_expression());
 
+        self.log_debug("parse_rest_of_expression() BEGIN");
         let mut cur_expr = left_expr;
         loop {
+            self.log_debug("parse_rest_of_expression() LOOP");
             let position = self.mark_position();
             let tok = self.next_token()?;
+            self.log_debug(format!("parse_rest_of_expression() GOT TOKEN {}", tok.kind().name()));
             if tok.kind().is_comma() {
                 if precedence >= Precedence::comma() {
                     self.rewind_position(position);
@@ -501,7 +528,27 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 continue;
             }
 
+            if tok.kind().is_open_bracket() {
+                // We should only ever see "[]" with precedence levels <= member.
+                assert!(precedence <= Precedence::member());
+                let rest_expr = self.parse_expression(Precedence::lowest())?;
+                self.must_expect_token(TokenKind::close_bracket())?;
+                cur_expr = Box::new(ast::ElementExprNode::new(cur_expr, rest_expr));
+                continue;
+            }
+
+            if tok.kind().is_open_paren() {
+                // We should only ever see "()" with precedence levels <= member.
+                self.log_debug("parse_rest_of_expression() HANDLE OPEN PAREN");
+                assert!(precedence <= Precedence::member());
+                let mut args_vec = Vec::with_capacity(2);
+                self.parse_arguments_list(&mut args_vec)?;
+                cur_expr = Box::new(ast::CallExprNode::new(cur_expr, args_vec));
+                continue;
+            }
+
             // Unknown token terminates expression.
+            self.log_debug("parse_rest_of_expression() REWIND AND RETURN");
             self.rewind_position(position);
             break;
         }
@@ -588,8 +635,12 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             }
             let kw_str = if check_kw { "kw" } else { "no-kw" };
             let nl_str = if want_newlines { "nl" } else { "no-nl" };
-            println!("next_token({}, {}): {}", kw_str, nl_str, token.token_string());
+            self.log_debug(format!("next_token({}, {}): {}", kw_str, nl_str, token.token_string()));
             return Ok(token);
         }
+    }
+
+    fn log_debug<'a, STR: Borrow<str>>(&self, str: STR) {
+        println!("DEBUG: {}", str.borrow());
     }
 }
