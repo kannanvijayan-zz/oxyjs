@@ -93,6 +93,14 @@ impl TokenKind {
         self.0 == TOK_FLOAT_LITERAL.0
     }
 
+    pub fn string_literal() -> TokenKind {
+        TokenKind(TOK_STRING_LITERAL.0)
+    }
+    pub fn is_string_literal(&self) -> bool {
+        self.0 == TOK_STRING_LITERAL.0
+    }
+
+
 
     pub fn open_paren() -> TokenKind {
         TokenKind(TOK_OPEN_PAREN.0)
@@ -645,7 +653,7 @@ impl TokenKind {
     }
 
     pub fn is_atomic_expr(&self) -> bool {
-        ((self.0 >= TOK_IDENTIFIER.0) && (self.0 <= TOK_FLOAT_LITERAL.0)) ||
+        ((self.0 >= TOK_IDENTIFIER.0) && (self.0 <= TOK_STRING_LITERAL.0)) ||
             (self.0 == TOK_THIS_KEYWORD.0) || (self.0 == TOK_NULL_KEYWORD.0) ||
             (self.0 == TOK_TRUE_KEYWORD.0) || (self.0 == TOK_FALSE_KEYWORD.0)
     }
@@ -670,9 +678,10 @@ const TOK_INTEGER_LITERAL: (u8, &'static str) = (TOK_IDENTIFIER.0 + 1, "integer_
 const TOK_HEX_INTEGER_LITERAL: (u8, &'static str) = (TOK_INTEGER_LITERAL.0 + 1, "hex_integer_literal");
 const TOK_OCT_INTEGER_LITERAL: (u8, &'static str) = (TOK_HEX_INTEGER_LITERAL.0 + 1, "oct_integer_literal");
 const TOK_FLOAT_LITERAL: (u8, &'static str) = (TOK_OCT_INTEGER_LITERAL.0 + 1, "float_literal");
+const TOK_STRING_LITERAL: (u8, &'static str) = (TOK_FLOAT_LITERAL.0 + 1, "string_literal");
 
 // Braces.
-const TOK_OPEN_PAREN: (u8, &'static str) = (TOK_FLOAT_LITERAL.0 + 1, "open_paren");
+const TOK_OPEN_PAREN: (u8, &'static str) = (TOK_STRING_LITERAL.0 + 1, "open_paren");
 const TOK_CLOSE_PAREN: (u8, &'static str) = (TOK_OPEN_PAREN.0 + 1, "close_paren");
 const TOK_OPEN_BRACKET: (u8, &'static str) = (TOK_CLOSE_PAREN.0 + 1, "open_bracket");
 const TOK_CLOSE_BRACKET: (u8, &'static str) = (TOK_OPEN_BRACKET.0 + 1, "close_bracket");

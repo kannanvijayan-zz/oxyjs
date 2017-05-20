@@ -182,6 +182,10 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             }
         }
 
+        if ch0.is_char('\'') || ch0.is_char('"') {
+            return self.read_ascii_string_literal(ch0);
+        }
+
         if ch0.is_char('/') {
             let ch1 = self.read_ascii_char();
             if ch1.is_char('/') {
@@ -634,6 +638,43 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
         }
 
         return self.emit_token(TokenKind::integer_literal());
+    }
+
+    fn read_ascii_string_literal(&mut self, quote_ch: AsciiChar) -> MODE::Tok {
+        loop {
+            let ch = self.read_ascii_char();
+            if ch == quote_ch {
+                break;
+            }
+
+            if ch.is_char('\\') {
+                // Handle escape sequences.
+                if let Err(e) = self.read_ascii_string_escape() {
+                    return self.emit_error(e);
+                }
+            }
+
+            if ! ch.is_ascii_or_end() {
+                // TODO: Handle non-ascii chars.
+                return self.emit_error(TokenError::CantHandleUnicodeYet);
+            }
+            continue;
+        }
+
+        return self.emit_token(TokenKind::string_literal());
+    }
+
+    fn read_ascii_string_escape(&mut self) -> Result<(), TokenError> {
+        let ch = self.read_ascii_char();
+        // TODO: handle all proper escape sequences, including unicode and hex.
+        if ! ch.is_ascii_or_end() {
+            // TODO: Handle non-ascii chars.
+            return Err(TokenError::CantHandleUnicodeYet);
+        }
+        if ch.is_end() {
+            return Err(TokenError::PrematureEnd(TokenKind::string_literal()));
+        }
+        Ok(())
     }
 
     fn read_ascii_float_fraction(&mut self) -> MODE::Tok {

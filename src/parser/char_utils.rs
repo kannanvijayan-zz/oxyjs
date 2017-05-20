@@ -3,7 +3,7 @@
  * AsciiChar represents an attempted read of an ASCII character from
  * the input stream.
  */
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AsciiChar(i32);
 
 /**
