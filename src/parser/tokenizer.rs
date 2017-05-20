@@ -165,6 +165,15 @@ impl<STREAM, MODE> Tokenizer<STREAM, MODE>
             return self.emit_token(single_kind);
         }
 
+        if ch0.is_char('.') {
+            let ch1 = self.read_ascii_char();
+            if ch1.is_digit() {
+                return self.read_ascii_float_fraction();
+            }
+            self.unread_ascii_char(ch1);
+            return self.emit_token(TokenKind::dot());
+        }
+
         if ch0.is_digit() {
             if ch0.is_char('0') {
                 return self.read_ascii_number_starting_with_zero();
@@ -836,7 +845,6 @@ unsafe fn init_single_char_tokens() {
     update_array(']', TokenKind::close_bracket());
     update_array('{', TokenKind::open_brace());
     update_array('}', TokenKind::close_brace());
-    update_array('.', TokenKind::dot());
     update_array(';', TokenKind::semicolon());
     update_array(',', TokenKind::comma());
     update_array('?', TokenKind::question());
