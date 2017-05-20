@@ -94,10 +94,11 @@ impl AstNode for ProgramNode {
  *****************************************************************************/
 #[derive(Debug)]
 pub struct BlockStmtNode {
+    statements: Vec<Box<AstNode>>
 }
 impl BlockStmtNode {
-    pub fn new() -> BlockStmtNode {
-        BlockStmtNode {}
+    pub fn new(statements: Vec<Box<AstNode>>) -> BlockStmtNode {
+        BlockStmtNode { statements }
     }
 }
 impl AstNode for BlockStmtNode {
@@ -111,7 +112,13 @@ impl AstNode for BlockStmtNode {
         false
     }
     fn write_tree(&self, w: &mut fmt::Write) -> Result<(), fmt::Error> {
-        w.write_str("Block{}")
+        w.write_str("Block{")?;
+        for stmt in &self.statements {
+            stmt.write_tree(w)?;
+            w.write_str(";")?;
+        }
+        w.write_str("}")?;
+        Ok(())
     }
 }
 

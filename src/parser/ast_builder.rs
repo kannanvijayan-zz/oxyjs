@@ -63,7 +63,8 @@ pub enum ParseError {
     ExpectedCommaOrSemicolon,
     ExpectedCommaOrCloseParen,
     ExpectedExpression,
-    ExpectedStatement
+    ExpectedStatement,
+    ExpectedEndOfStatement
 }
 pub type ParseResult<T> = Result<T, ParseError>;
 pub type MaybeParseResult<T> = ParseResult<Option<T>>;
@@ -135,10 +136,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         let tok = self.next_token()?;
         if tok.kind().is_open_brace() {
             self.log_debug(format!("check_parse_statement() OPEN BRACE"));
-            // FIXME: parse either a block or an object literal.
-            // The spec says a '{' at the statement level can only be a block,
-            // but practical implementations seem to allow bare object literals.
-            return Ok(Some(self.parse_block_statement()?));
+            return Ok(Some(self.parse_block_or_object()?));
         }
         if tok.kind().is_var_keyword() {
             self.log_debug(format!("check_parse_statement() VAR"));
@@ -155,8 +153,20 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
 
         self.log_debug(format!("check_parse_statement() CHECKING FOR EXPRESSION"));
         if let Some(boxed_expr) = self.try_parse_expression_with(tok, Precedence::lowest())? {
-            self.log_debug(format!("check_parse_statement() GOT EXPRESSION"));
-            return Ok(Some(Box::new(ast::ExprStmtNode::new(boxed_expr))));
+            self.log_debug(format!("check_parse_statement() GOT EXPRESSION. CHECK FOR SEMICOLON"));
+            // Check for semicolon or newline after expression statement.
+            let posn = self.mark_position();
+            let end_tok = self.next_token_keep_newline()?;
+            if end_tok.kind().is_newline() || end_tok.kind().is_semicolon() {
+                return Ok(Some(Box::new(ast::ExprStmtNode::new(boxed_expr))));
+            }
+
+            self.rewind_position(posn);
+            if end_tok.kind().is_close_brace() {
+                return Ok(Some(Box::new(ast::ExprStmtNode::new(boxed_expr))));
+            } else {
+                return Err(ParseError::ExpectedEndOfStatement);
+            }
         }
 
         self.log_debug(format!("check_parse_statement() END (FAILED)"));
@@ -164,26 +174,37 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         Ok(None)
     }
 
-    fn parse_block_statement(&mut self) -> ParseResult<Box<ast::BlockStmtNode>> {
-        // FIXME: Parse list of statements.
-        self.must_expect_token(TokenKind::close_brace())?;
-        Ok(Box::new(ast::BlockStmtNode::new()))
+    fn parse_block_or_object(&mut self) -> ParseResult<Box<AstNode>> {
+        // Check for empty block.
+        if self.expect_token(TokenKind::close_brace())? {
+            return Ok(Box::new(ast::BlockStmtNode::new(Vec::new())));
+        }
+
+        // FIXME: Check for object literal.
+
+        // Parse statements.
+        let mut statements: Vec<Box<AstNode>> = Vec::new();
+        loop {
+            if self.expect_token(TokenKind::close_brace())? {
+                break;
+            }
+            let stmt = self.parse_statement()?;
+            statements.push(stmt);
+        }
+
+        Ok(Box::new(ast::BlockStmtNode::new(statements)))
     }
 
     fn parse_var_statement(&mut self) -> ParseResult<Box<ast::VarStmtNode>> {
         let mut var_statement = Box::new(ast::VarStmtNode::new());
         loop {
-            // FIXME: Support initializer expressions.
-            // For now, we match only a VarName ("," VarName)* ";"
+            // Parse var name.
             let name_token = match self.expect_get_token(TokenKind::identifier())? {
                 Some(token) => token,
                 None => { return Err(ParseError::ExpectedVariableName); }
             };
 
             let next_tok = self.next_token()?;
-            if next_tok.kind().is_semicolon() {
-                break;
-            }
             if next_tok.kind().is_assign() {
                 // Parse an initializer.
                 let boxed_expr = self.parse_expression(Precedence::assignment())?;
@@ -191,11 +212,11 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 var_statement.add_var_decl_with_init(name_token, boxed_expr);
 
                 let next_tok = self.next_token()?;
-                if next_tok.kind().is_semicolon() {
-                    break;
-                }
                 if next_tok.kind().is_comma() {
                     continue;
+                }
+                if next_tok.kind().is_semicolon() || self.skipped_newline {
+                    break;
                 }
                 return Err(ParseError::ExpectedCommaOrSemicolon);
             }
@@ -203,16 +224,25 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
                 var_statement.add_var_decl(name_token);
                 continue;
             }
+            // If there was a semicolon, or newline, end of statement.
+            if next_tok.kind().is_semicolon() || self.skipped_newline {
+                break;
+            }
+
             return Err(ParseError::ExpectedCommaOrSemicolon);
         }
         Ok(var_statement)
     }
 
     fn parse_if_statement(&mut self) -> ParseResult<Box<AstNode>> {
+        self.log_debug("parse_if_statement() BEGIN");
         // "if" must be followed by "(".
         self.must_expect_token(TokenKind::open_paren())?;
+        self.log_debug("parse_if_statement() PARSE COND EXPRESSION");
         let cond_expr = self.parse_expression(Precedence::lowest())?;
+        self.log_debug("parse_if_statement() EXPECT CLOSE PAREN");
         self.must_expect_token(TokenKind::close_paren())?;
+        self.log_debug("parse_if_statement() PARSE IF STATEMENT");
         let if_true_stmt = self.parse_statement()?;
 
         // Check for 'else'
@@ -615,6 +645,9 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     }
     fn next_token_no_keywords(&mut self) -> ParseResult<FullToken> {
         self.next_token_impl(/* check_kw = */ true, /* want_newlines = */ false)
+    }
+    fn next_token_keep_newline(&mut self) -> ParseResult<FullToken> {
+        self.next_token_impl(/* check_kw = */ true, /* want_newlines = */ true)
     }
 
     fn next_token_impl(&mut self, check_kw: bool, want_newlines: bool) -> ParseResult<FullToken> {
