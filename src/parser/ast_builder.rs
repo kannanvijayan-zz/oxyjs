@@ -100,12 +100,14 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         let mut program_node = ast::ProgramNode::new();
         loop {
             self.log_debug(format!("parse_program() LOOP"));
-            match self.check_parse_statement()? {
+            let position = self.mark_position();
+            match self.try_parse_statement()? {
                 Some(boxed_source_element) => {
                     self.log_debug(format!("parse_program() GOT SOURCE ELEMENT"));
                     program_node.add_source_element(boxed_source_element);
                 }
                 None => {
+                    self.rewind_position(position);
                     break;
                 }
             }
@@ -121,39 +123,40 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
 
     fn parse_statement(&mut self) -> ParseResult<Box<AstNode>> {
         self.log_debug(format!("parse_statement() BEGIN"));
-        if let Some(boxed_stmt) = self.check_parse_statement()? {
+        let position = self.mark_position();
+        if let Some(boxed_stmt) = self.try_parse_statement()? {
             self.log_debug(format!("parse_statement() GOT STATEMENT"));
             Ok(boxed_stmt)
         } else {
             self.log_debug(format!("parse_statement() NO STATEMENT"));
+            self.rewind_position(position);
             Err(ParseError::ExpectedStatement)
         }
     }
 
-    fn check_parse_statement(&mut self) -> MaybeParseResult<Box<AstNode>> {
-        self.log_debug(format!("check_parse_statement() BEGIN"));
-        let begin_position = self.mark_position();
+    fn try_parse_statement(&mut self) -> MaybeParseResult<Box<AstNode>> {
+        self.log_debug(format!("try_parse_statement() BEGIN"));
         let tok = self.next_token()?;
         if tok.kind().is_open_brace() {
-            self.log_debug(format!("check_parse_statement() OPEN BRACE"));
+            self.log_debug(format!("try_parse_statement() OPEN BRACE"));
             return Ok(Some(self.parse_block_or_object()?));
         }
         if tok.kind().is_var_keyword() {
-            self.log_debug(format!("check_parse_statement() VAR"));
+            self.log_debug(format!("try_parse_statement() VAR"));
             return Ok(Some(self.parse_var_statement()?));
         }
         if tok.kind().is_semicolon() {
-            self.log_debug(format!("check_parse_statement() SEMICOLON"));
+            self.log_debug(format!("try_parse_statement() SEMICOLON"));
             return Ok(Some(Box::new(ast::EmptyStmtNode::new())));
         }
         if tok.kind().is_if_keyword() {
-            self.log_debug(format!("check_parse_statement() IF"));
+            self.log_debug(format!("try_parse_statement() IF"));
             return Ok(Some(self.parse_if_statement()?));
         }
 
-        self.log_debug(format!("check_parse_statement() CHECKING FOR EXPRESSION"));
+        self.log_debug(format!("try_parse_statement() CHECKING FOR EXPRESSION"));
         if let Some(boxed_expr) = self.try_parse_expression_with(tok, Precedence::lowest())? {
-            self.log_debug(format!("check_parse_statement() GOT EXPRESSION. CHECK FOR SEMICOLON"));
+            self.log_debug(format!("try_parse_statement() GOT EXPRESSION. CHECK FOR SEMICOLON"));
             // Check for semicolon or newline after expression statement.
             let posn = self.mark_position();
             let end_tok = self.next_token_keep_newline()?;
@@ -169,8 +172,7 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
             }
         }
 
-        self.log_debug(format!("check_parse_statement() END (FAILED)"));
-        self.rewind_position(begin_position);
+        self.log_debug(format!("try_parse_statement() END (FAILED)"));
         Ok(None)
     }
 
@@ -255,21 +257,17 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> ParseResult<Box<AstNode>> {
-        if let Some(boxed_expr) = self.check_parse_expression(precedence)? {
+        let position = self.mark_position();
+        if let Some(boxed_expr) = self.try_parse_expression(precedence)? {
             Ok(boxed_expr)
         } else {
+            self.rewind_position(position);
             Err(ParseError::ExpectedExpression)
         }
     }
-    fn check_parse_expression(&mut self, precedence: Precedence) -> MaybeParseResult<Box<AstNode>> {
-        let position = self.mark_position();
+    fn try_parse_expression(&mut self, precedence: Precedence) -> MaybeParseResult<Box<AstNode>> {
         let tok = self.next_token()?;
-        if let Some(expr) = self.try_parse_expression_with(tok, precedence)? {
-            Ok(Some(expr))
-        } else {
-            self.rewind_position(position);
-            Ok(None)
-        }
+        self.try_parse_expression_with(tok, precedence)
     }
 
     fn try_parse_expression_with(&mut self, tok: FullToken, precedence: Precedence)
