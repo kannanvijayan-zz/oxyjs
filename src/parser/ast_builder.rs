@@ -121,25 +121,12 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         Ok(Box::new(program_node))
     }
 
-    fn parse_statement(&mut self) -> ParseResult<Box<AstNode>> {
-        self.log_debug(format!("parse_statement() BEGIN"));
-        let position = self.mark_position();
-        if let Some(boxed_stmt) = self.try_parse_statement()? {
-            self.log_debug(format!("parse_statement() GOT STATEMENT"));
-            Ok(boxed_stmt)
-        } else {
-            self.log_debug(format!("parse_statement() NO STATEMENT"));
-            self.rewind_position(position);
-            Err(ParseError::ExpectedStatement)
-        }
-    }
-
     fn try_parse_statement(&mut self) -> MaybeParseResult<Box<AstNode>> {
         self.log_debug(format!("try_parse_statement() BEGIN"));
         let tok = self.next_token()?;
         if tok.kind().is_open_brace() {
             self.log_debug(format!("try_parse_statement() OPEN BRACE"));
-            return Ok(Some(self.parse_block_or_object()?));
+            return Ok(Some(self.parse_block_or_object_expression()?));
         }
         if tok.kind().is_var_keyword() {
             self.log_debug(format!("try_parse_statement() VAR"));
@@ -176,25 +163,33 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         Ok(None)
     }
 
-    fn parse_block_or_object(&mut self) -> ParseResult<Box<AstNode>> {
+    fn parse_block_or_object_expression(&mut self) -> ParseResult<Box<AstNode>> {
         // Check for empty block.
         if self.expect_token(TokenKind::close_brace())? {
             return Ok(Box::new(ast::BlockStmtNode::new(Vec::new())));
         }
 
-        // FIXME: Check for object literal.
+        let position = self.mark_position();
 
-        // Parse statements.
+        // Try parsing statements in block.
         let mut statements: Vec<Box<AstNode>> = Vec::new();
         loop {
             if self.expect_token(TokenKind::close_brace())? {
-                break;
+                return Ok(Box::new(ast::BlockStmtNode::new(statements)));
             }
-            let stmt = self.parse_statement()?;
-            statements.push(stmt);
+
+            if let Some(stmt) = self.try_parse_statement()? {
+                statements.push(stmt);
+                continue;
+            }
+
+            self.rewind_position(position);
+            break;
         }
 
-        Ok(Box::new(ast::BlockStmtNode::new(statements)))
+        // If that failed, try parsing an object literal.
+        // FIXME: Actually try parsing an object literal.
+        return Err(ParseError::ExpectedStatement);
     }
 
     fn parse_var_statement(&mut self) -> ParseResult<Box<ast::VarStmtNode>> {
@@ -245,11 +240,28 @@ impl<STREAM: InputStream> AstBuilder<STREAM> {
         self.log_debug("parse_if_statement() EXPECT CLOSE PAREN");
         self.must_expect_token(TokenKind::close_paren())?;
         self.log_debug("parse_if_statement() PARSE IF STATEMENT");
-        let if_true_stmt = self.parse_statement()?;
+        let if_true_stmt = {
+            let post_if_position = self.mark_position();
+            let stmt = match self.try_parse_statement()? {
+                Some(stmt) => stmt,
+                None => {
+                    self.rewind_position(post_if_position);
+                    return Err(ParseError::ExpectedStatement);
+                }
+            };
+            stmt
+        };
 
         // Check for 'else'
         if self.expect_token(TokenKind::else_keyword())? {
-            let if_false_stmt = self.parse_statement()?;
+            let post_else_position = self.mark_position();
+            let if_false_stmt = match self.try_parse_statement()? {
+                Some(stmt) => stmt,
+                None => {
+                    self.rewind_position(post_else_position);
+                    return Err(ParseError::ExpectedStatement);
+                }
+            };
             Ok(Box::new(ast::IfStmtNode::new_if_else(cond_expr, if_true_stmt, if_false_stmt)))
         } else {
             Ok(Box::new(ast::IfStmtNode::new_if(cond_expr, if_true_stmt)))
