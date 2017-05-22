@@ -1,5 +1,6 @@
 
 pub mod parser;
+pub mod vm;
 
 /**
  * Initializer for library that must be called exactly once at the
